@@ -1,0 +1,188 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+
+// ==================== USERS ====================
+// ==================== USERS ====================
+model User {
+  id       String   @id @default(uuid())
+  username String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // LeetCode data
+  profileUrl          String? @map("profile_url")
+  profilePictureUrl   String? @map("profile_picture_url")
+  
+  // Extended LeetCode profile
+  realName            String? @map("real_name")
+  githubUrl           String? @map("github_url")
+  linkedinUrl         String? @map("linkedin_url")
+  twitterUrl          String? @map("twitter_url")
+  countryName         String? @map("country_name")
+  ranking             Int?    @map("ranking")
+  reputation          Int?    @default(0)
+  skillTags           String[] @map("skill_tags")
+  aboutMe             String? @db.Text @map("about_me")
+  
+  // Submission stats
+  totalSubmissions    Int @default(0) @map("total_submissions")
+  acceptedSubmissions Int @default(0) @map("accepted_submissions")
+  easyCount           Int @default(0) @map("easy_count")
+  mediumCount         Int @default(0) @map("medium_count")
+  hardCount           Int @default(0) @map("hard_count")
+
+  // Streak cache (calculated fields)
+  currentStreak         Int       @default(0) @map("current_streak")
+  longestStreak         Int       @default(0) @map("longest_streak")
+  lastProblemSolvedAt   DateTime? @map("last_problem_solved_at")
+  totalProblemsSolved   Int       @default(0) @map("total_problems_solved")
+
+  // Settings
+  timezone                 String  @default("UTC")
+
+  // Relations
+  solutions       UserSolution[]
+  streakHistory   StreakHistory[]
+  userGroups      UserGroup[]
+  adminOfGroups   Group[]         @relation("GroupAdmin")
+  syncLogs        SyncLog[]
+
+  @@map("users")
+}
+
+// ==================== LEETCODE PROBLEMS ====================
+model LeetCodeProblem {
+  id         String   @id @default(uuid())
+  slug       String   @unique
+  title      String
+  difficulty String   // 'easy', 'medium', 'hard'
+  category   String?
+  url        String
+
+  // Relations
+  solutions UserSolution[]
+
+  @@map("leetcode_problems")
+}
+
+// ==================== USER SOLUTIONS ====================
+model UserSolution {
+  id            String   @id @default(uuid())
+  userId        String   @map("user_id")
+  problemId     String   @map("problem_id")
+  language      String
+  solvedAt      DateTime @default(now()) @map("solved_at")
+  submissionUrl String?  @map("submission_url")
+
+  // Relations
+  user    User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  problem LeetCodeProblem @relation(fields: [problemId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, problemId, solvedAt])
+  @@index([userId, solvedAt(sort: Desc)])
+  @@map("user_solutions")
+}
+
+// ==================== STREAK HISTORY ====================
+model StreakHistory {
+  id              String    @id @default(uuid())
+  userId          String    @map("user_id")
+  date            DateTime  @db.Date
+  problemsSolved  Int       @default(0) @map("problems_solved")
+  firstProblemAt  DateTime? @map("first_problem_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@index([userId, date(sort: Desc)])
+  @@map("streak_history")
+}
+
+// ==================== GROUPS ====================
+model Group {
+  id          String   @id @default(uuid())
+  name        String
+  description String?  @db.Text
+  adminId     String   @map("admin_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  isPrivate   Boolean  @default(false) @map("is_private")
+  inviteCode  String?  @unique @map("invite_code")
+  maxMembers  Int      @default(5) @map("max_members")
+
+  // Streak cache
+  currentStreak Int @default(0) @map("current_streak")
+  longestStreak Int @default(0) @map("longest_streak")
+
+  // Relations
+  admin               User                  @relation("GroupAdmin", fields: [adminId], references: [id], onDelete: Restrict)
+  userGroups          UserGroup[]
+  groupDailyActivity  GroupDailyActivity[]
+
+  @@map("groups")
+}
+
+// ==================== USER TO GROUP (MEMBERS) ====================
+model UserGroup {
+  id       String    @id @default(uuid())
+  userId   String    @map("user_id")
+  groupId  String    @map("group_id")
+  role     String    @default("member") // 'admin', 'member'
+  joinedAt DateTime  @default(now()) @map("joined_at")
+  leftAt   DateTime? @map("left_at")
+
+  // Relations
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, groupId])
+  @@index([groupId, role])
+  @@map("user_groups")
+}
+
+// ==================== GROUP DAILY ACTIVITY ====================
+model GroupDailyActivity {
+  id                   String   @id @default(uuid())
+  groupId              String   @map("group_id")
+  date                 DateTime @db.Date
+  activeMembers        Int      @default(0) @map("active_members")
+  totalProblemsSolved  Int      @default(0) @map("total_problems_solved")
+
+  // Relations
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, date])
+  @@index([groupId, date(sort: Desc)])
+  @@map("group_daily_activity")
+}
+
+// ==================== SYNC LOGS ====================
+model SyncLog {
+  id             String    @id @default(uuid())
+  userId         String    @map("user_id")
+  startedAt      DateTime  @default(now()) @map("started_at")
+  completedAt    DateTime? @map("completed_at")
+  status         String    // 'success', 'error', 'in_progress'
+  problemsSynced Int       @default(0) @map("problems_synced")
+  errorMessage   String?   @db.Text @map("error_message")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, startedAt(sort: Desc)])
+  @@map("sync_logs")
+}
