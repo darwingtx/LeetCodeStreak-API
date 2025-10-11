@@ -6,16 +6,14 @@
 
 generator client {
   provider = "prisma-client-js"
-  output   = "../generated/prisma"
 }
+
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
-
-// ==================== USERS ====================
 // ==================== USERS ====================
 model User {
   id       String   @id @default(uuid())
@@ -33,6 +31,10 @@ model User {
   linkedinUrl         String? @map("linkedin_url")
   twitterUrl          String? @map("twitter_url")
   countryName         String? @map("country_name")
+  birthday           DateTime? @map("birthday")
+  school              String? @map("school")
+  company             String? @map("company")
+  websiteUrl         String[] @map("website_url")
   ranking             Int?    @map("ranking")
   reputation          Int?    @default(0)
   skillTags           String[] @map("skill_tags")
@@ -55,47 +57,37 @@ model User {
   timezone                 String  @default("UTC")
 
   // Relations
-  solutions       UserSolution[]
   streakHistory   StreakHistory[]
   userGroups      UserGroup[]
   adminOfGroups   Group[]         @relation("GroupAdmin")
-  syncLogs        SyncLog[]
 
   @@map("users")
+  UserSubmission UserSubmission[]
+  SyncLog SyncLog[]
 }
 
-// ==================== LEETCODE PROBLEMS ====================
-model LeetCodeProblem {
-  id         String   @id @default(uuid())
-  slug       String   @unique
-  title      String
-  difficulty String   // 'easy', 'medium', 'hard'
-  category   String?
-  url        String
-
-  // Relations
-  solutions UserSolution[]
-
-  @@map("leetcode_problems")
-}
-
-// ==================== USER SOLUTIONS ====================
-model UserSolution {
+model UserSubmission {
   id            String   @id @default(uuid())
   userId        String   @map("user_id")
-  problemId     String   @map("problem_id")
+  
+  // Submission data from LeetCode API
+  title         String
+  titleSlug     String   @map("title_slug") // Unix timestamp as string from API
+  submittedAt   DateTime @map("submitted_at") // Converted timestamp
+  statusDisplay String   @map("status_display") // "Accepted", "Wrong Answer", etc
   language      String
-  solvedAt      DateTime @default(now()) @map("solved_at")
-  submissionUrl String?  @map("submission_url")
-
+  difficulty    String?  // If we can determine it
+  
   // Relations
-  user    User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  problem LeetCodeProblem @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, problemId, solvedAt])
-  @@index([userId, solvedAt(sort: Desc)])
-  @@map("user_solutions")
+  @@unique([userId, titleSlug, submittedAt])
+  @@index([userId, submittedAt(sort: Desc)])
+  @@index([userId, statusDisplay, submittedAt])
+  @@map("user_submissions")
 }
+
+
 
 // ==================== STREAK HISTORY ====================
 model StreakHistory {
@@ -122,18 +114,23 @@ model Group {
   createdAt   DateTime @default(now()) @map("created_at")
   isPrivate   Boolean  @default(false) @map("is_private")
   inviteCode  String?  @unique @map("invite_code")
-  maxMembers  Int      @default(5) @map("max_members")
 
-  // Streak cache
+  // Racha actual y máxima
   currentStreak Int @default(0) @map("current_streak")
   longestStreak Int @default(0) @map("longest_streak")
 
-  // Relations
-  admin               User                  @relation("GroupAdmin", fields: [adminId], references: [id], onDelete: Restrict)
-  userGroups          UserGroup[]
-  groupDailyActivity  GroupDailyActivity[]
+  // Relaciones
+  admin              User                @relation("GroupAdmin", fields: [adminId], references: [id], onDelete: Restrict)
+  userGroups         UserGroup[]
+  streakHistory      GroupStreakHistory[] // ← reemplaza a groupDailyActivity
 
   @@map("groups")
+}
+
+
+enum GroupRole {
+  ADMIN
+  MEMBER
 }
 
 // ==================== USER TO GROUP (MEMBERS) ====================
@@ -141,7 +138,7 @@ model UserGroup {
   id       String    @id @default(uuid())
   userId   String    @map("user_id")
   groupId  String    @map("group_id")
-  role     String    @default("member") // 'admin', 'member'
+  role     GroupRole @default(MEMBER)
   joinedAt DateTime  @default(now()) @map("joined_at")
   leftAt   DateTime? @map("left_at")
 
@@ -154,35 +151,44 @@ model UserGroup {
   @@map("user_groups")
 }
 
-// ==================== GROUP DAILY ACTIVITY ====================
-model GroupDailyActivity {
-  id                   String   @id @default(uuid())
-  groupId              String   @map("group_id")
-  date                 DateTime @db.Date
-  activeMembers        Int      @default(0) @map("active_members")
-  totalProblemsSolved  Int      @default(0) @map("total_problems_solved")
 
-  // Relations
+enum GroupStreakStatus {
+  COMPLETED   // El grupo mantuvo la racha ese día
+  MISSED      // El grupo no completó la racha (la rompió)
+  IN_PROGRESS // Día actual en curso (sin cerrar todavía)
+}
+
+// ==================== GROUP DAILY ACTIVITY ====================
+model GroupStreakHistory {
+  id                  String   @id @default(uuid())
+  groupId             String   @map("group_id")
+  date                DateTime @db.Date
+  status              GroupStreakStatus  @default(IN_PROGRESS)
+  streakValue         Int      @default(0) @map("streak_value")
+  activeMembers       Int      @default(0) @map("active_members")
+  totalProblemsSolved Int      @default(0) @map("total_problems_solved")
+
+  // Relaciones
   group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
 
   @@unique([groupId, date])
   @@index([groupId, date(sort: Desc)])
-  @@map("group_daily_activity")
+  @@map("group_streak_history")
 }
+
 
 // ==================== SYNC LOGS ====================
 model SyncLog {
-  id             String    @id @default(uuid())
-  userId         String    @map("user_id")
-  startedAt      DateTime  @default(now()) @map("started_at")
-  completedAt    DateTime? @map("completed_at")
-  status         String    // 'success', 'error', 'in_progress'
-  problemsSynced Int       @default(0) @map("problems_synced")
-  errorMessage   String?   @db.Text @map("error_message")
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  syncTime    DateTime @default(now()) @map("sync_time")
+  status      String   @map("status") // 'success', 'error'
+  errorMessage String? @map("error_message")
+  apiRateLimitRemaining Int? @map("api_rate_limit_remaining")
+  partialSyncOffset     String? @map("partial_sync_offset")
 
-  // Relations
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([userId, startedAt(sort: Desc)])
+  @@index([userId, syncTime(sort: Desc)])
   @@map("sync_logs")
 }
