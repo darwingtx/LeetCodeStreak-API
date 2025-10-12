@@ -1,14 +1,16 @@
 import { Injectable } from '@nestjs/common';
-import { UserDataProfile } from './userTypes';
+import { MatchedUser, UserDataProfile } from './userTypes';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class UserService {
-
   apiUrl: string | undefined;
 
-  constructor(private configService: ConfigService, private prisma: PrismaService) {
+  constructor(
+    private configService: ConfigService,
+    private prisma: PrismaService,
+  ) {
     this.configService = configService;
     this.apiUrl = this.configService.get<string>('API_URL');
     this.prisma = prisma;
@@ -19,31 +21,63 @@ export class UserService {
     return fetch(urlUser).then((res) => res.json());
   }
 
-  async getProfileByUsername(username: string): Promise<UserDataProfile> {
+  async getProfileByUsername(username: string): Promise<MatchedUser> {
     if (!this.apiUrl) {
       throw new Error('API_URL environment variable is not defined');
     }
-
-    const query = `
+    const query = `#graphql
     query getUserProfile($username: String!) {
-      matchedUser(username: $username) {
-        profile {
-          realName
-          userAvatar
-          birthday
-          ranking
-          reputation
-          websites
-          countryName
-          company
-          school
-          skillTags
-          aboutMe
-          starRating
+        matchedUser(username: $username) {
+            username
+            githubUrl
+            twitterUrl
+            linkedinUrl
+            contributions {
+                points
+                questionCount
+                testcaseCount
+            }
+            profile {
+                realName
+                userAvatar
+                birthday
+                ranking
+                reputation
+                websites
+                countryName
+                company
+                school
+                skillTags
+                aboutMe
+                starRating
+            }
+            badges {
+                id
+                displayName
+                icon
+                creationDate
+            }
+            upcomingBadges {
+                name
+                icon
+            }
+            activeBadge {
+                id
+                displayName
+                icon
+                creationDate
+            }
+            submitStats {
+                
+                acSubmissionNum {
+                    difficulty
+                    count
+                    submissions
+                }
+            }
+            
         }
-      }
-    }
-  `;
+    }`;
 
     const body = JSON.stringify({
       query,
@@ -61,7 +95,13 @@ export class UserService {
     }
 
     const data = await res.json();
-    return data.data.matchedUser.profile as UserDataProfile;
+    const matchedUser = data?.data?.matchedUser;
+    if (!matchedUser) {
+      throw new Error(
+        `No se encontró el usuario ${username} en la API externa`,
+      );
+    }
+    return matchedUser;
   }
 
   async createUser(username: string) {
@@ -111,7 +151,7 @@ export class UserService {
     }
   `;
 
-   const body = JSON.stringify({
+    const body = JSON.stringify({
       query,
       variables: { username },
     });
@@ -129,7 +169,9 @@ export class UserService {
     const { data } = await res.json();
     const matchedUser = data?.matchedUser;
     if (!matchedUser) {
-      throw new Error(`No se encontró el usuario ${username} en la API externa`);
+      throw new Error(
+        `No se encontró el usuario ${username} en la API externa`,
+      );
     }
 
     const profile = matchedUser.profile ?? {};
@@ -157,5 +199,36 @@ export class UserService {
     });
 
     return user;
+  }
+
+  async updateUserProfile(username: string) {
+    const profile = await this.getProfileByUsername(username);
+    const updatedUser = await this.prisma.user.update({
+      where: { username: username },
+      data: {
+        username: profile.username,
+        githubUrl: profile.githubUrl,
+        twitterUrl: profile.twitterUrl,
+        linkedinUrl: profile.linkedinUrl,
+        realName: profile.profile?.realName,
+        profilePictureUrl: profile.profile?.userAvatar,
+        birthday: profile.profile?.birthday
+          ? new Date(profile.profile?.birthday)
+          : null,
+        ranking: profile.profile?.ranking ?? null,
+        reputation: profile.profile?.reputation ?? 0,
+        websiteUrl: profile.profile?.websites ?? [],
+        countryName: profile.profile?.countryName,
+        company: profile.profile?.company,
+        school: profile.profile?.school,
+        skillTags: profile.profile?.skillTags ?? [],
+        aboutMe: profile.profile?.aboutMe,
+        profileUrl: `https://leetcode.com/${username}`,
+        totalSubmissions: profile.submitStats?.acSubmissionNum?.[0]?.count ?? 0, 
+        updatedAt: new Date(),
+      },
+    });
+
+    return updatedUser;
   }
 }
