@@ -226,6 +226,8 @@ export class UserService {
         profileUrl: `https://leetcode.com/${username}`,
         totalSubmissions: profile.submitStats?.acSubmissionNum?.[0]?.count ?? 0, 
         updatedAt: new Date(),
+        acceptedSubmissions: profile.submitStats?.acSubmissionNum?.[0]?.submissions ?? 0,
+        
       },
     });
 

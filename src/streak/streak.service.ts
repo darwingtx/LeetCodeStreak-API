@@ -2,7 +2,9 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { toZonedTime, format } from 'date-fns-tz';
+import { differenceInCalendarDays, addDays } from 'date-fns';
 import { Submission } from 'src/user/userTypes';
+import { last } from 'rxjs';
 
 @Injectable()
 export class StreakService {
@@ -31,7 +33,7 @@ export class StreakService {
   }
 
   async updateStreakByUserId(id: string, timezone: string) {
-    const user = await this.prisma.user.findUnique({
+    let user = await this.prisma.user.findUnique({
       where: { id: id },
       select: {
         id: true,
@@ -43,10 +45,7 @@ export class StreakService {
     if (!user) {
       throw new Error(`User with id ${id} not found`);
     }
-    if (!user.lastProblemSolvedAt) {
-      throw new Error(`User with id ${id} has not solved any problems yet`);
-    }
-    const lastSolvedDate = new Date(user.lastProblemSolvedAt);
+
     const query = `#graphql
     query getACSubmissions ($username: String!, $limit: Int) {
     recentAcSubmissionList(username: $username, limit: $limit) {
@@ -57,7 +56,6 @@ export class StreakService {
         lang
     }
 }`;
-    console.log('Last Solved Date (UTC):', lastSolvedDate.toISOString());
     const body = JSON.stringify({
       query,
       variables: { username: user.username, limit: 30 },
@@ -77,8 +75,33 @@ export class StreakService {
 
     const data = await res.json();
     const submissions: Submission[] = data.data.recentAcSubmissionList;
-  }
+    let newStreak: number = 0;
+    let lastSolvedDate: number = submissions[0]?.timestamp || 0;
 
+    for (const submission of submissions) {
+      const submissionDate = this.convertTimestampToTimezoneDate(
+        submission.timestamp,
+        timezone,
+      );
+      if (this.isSameDay(submission.timestamp, lastSolvedDate, timezone)) {
+        newStreak++;
+      } else if (
+        this.isPreviousDay(submission.timestamp, lastSolvedDate, timezone)
+      ) {
+        newStreak++;
+        lastSolvedDate = submission.timestamp;
+      }
+    }
+    user = await this.prisma.user.update({
+      where: { id: id },
+      data: {
+        currentStreak: newStreak,
+        lastProblemSolvedAt: this.convertTimestampToZonedDate(lastSolvedDate, timezone),
+      },
+    });
+
+    return user;
+  }
   resetStreakByUserId(id: string) {
     return `This action resets the streak for user with id: ${id}`;
   }
@@ -87,14 +110,48 @@ export class StreakService {
     timestampInSeconds: number,
     timezone: string,
   ): string {
-    // Convierte a milisegundos
     const date = new Date(timestampInSeconds * 1000);
-
-    // Convierte la fecha UTC a la zona horaria indicada
     const zonedDate = toZonedTime(date, timezone);
 
     console.log('Zoned Date:', zonedDate);
-    // Retorna un string legible, formateado a tu gusto
     return format(zonedDate, 'yyyy-MM-dd HH:mm:ssXXX', { timeZone: timezone });
+  }
+
+  private convertTimestampToZonedDate(
+    timestampInSeconds: number,
+    timezone: string,
+  ): Date {
+    const date = new Date(timestampInSeconds * 1000);
+    const zonedDate = toZonedTime(date, timezone);
+    return zonedDate;
+  }
+
+  private formatZonedDateDay(date: Date, timezone: string): string {
+    return format(date, 'yyyy-MM-dd', { timeZone: timezone });
+  }
+
+  private isSameDay(tsA: number, tsB: number, timezone: string): boolean {
+    const a = this.convertTimestampToZonedDate(tsA, timezone);
+    const b = this.convertTimestampToZonedDate(tsB, timezone);
+    return (
+      this.formatZonedDateDay(a, timezone) ===
+      this.formatZonedDateDay(b, timezone)
+    );
+  }
+
+  private isPreviousDay(
+    submissionTs: number,
+    lastSolvedTs: number,
+    timezone: string,
+  ): boolean {
+    const subDay = this.formatZonedDateDay(
+      this.convertTimestampToZonedDate(submissionTs, timezone),
+      timezone,
+    );
+    const prevDay = this.formatZonedDateDay(
+      addDays(this.convertTimestampToZonedDate(lastSolvedTs, timezone), -1),
+      timezone,
+    );
+    return subDay === prevDay;
   }
 }

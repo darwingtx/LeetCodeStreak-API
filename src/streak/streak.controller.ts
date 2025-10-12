@@ -13,7 +13,7 @@ export class StreakController {
         return this.streakService.getStreakByUserId(id);
     }
 
-    @Patch('/:id')
+    @Patch('update/:id')
     updateStreak(@Param('id') id: string, @Body() body: { timezone: string }) {
         return this.streakService.updateStreakByUserId(id, body.timezone);
     }
