@@ -77,7 +77,7 @@ export class StreakService {
     const submissions: Submission[] = data.data.recentAcSubmissionList;
     let newStreak: number = 0;
     let lastSolvedDate: number = submissions[0]?.timestamp || 0;
-
+    const lastDate: number = submissions[0]?.timestamp || 0;
     for (const submission of submissions) {
       const submissionDate = this.convertTimestampToTimezoneDate(
         submission.timestamp,
@@ -92,11 +92,13 @@ export class StreakService {
         lastSolvedDate = submission.timestamp;
       }
     }
+    console.log("--------------" + lastDate);
+    console.log('Last solved date (timestamp):', lastSolvedDate);
     user = await this.prisma.user.update({
       where: { id: id },
       data: {
         currentStreak: newStreak,
-        lastProblemSolvedAt: this.convertTimestampToZonedDate(lastSolvedDate, timezone),
+        lastProblemSolvedAt: this.convertTimestampToZonedDate(lastDate, timezone),
       },
     });
 
@@ -117,14 +119,20 @@ export class StreakService {
     return format(zonedDate, 'yyyy-MM-dd HH:mm:ssXXX', { timeZone: timezone });
   }
 
-  private convertTimestampToZonedDate(
-    timestampInSeconds: number,
-    timezone: string,
-  ): Date {
-    const date = new Date(timestampInSeconds * 1000);
-    const zonedDate = toZonedTime(date, timezone);
-    return zonedDate;
-  }
+private convertTimestampToZonedDate(
+  timestampInSeconds: number,
+  timezone: string,
+): Date {
+  const date = new Date(timestampInSeconds * 1000);
+  console.log('Original UTC date:', date.toISOString());
+  console.log('Timezone:', timezone);
+  
+  const zonedDate = toZonedTime(date, timezone);
+  console.log('Zoned date (represents local time):', zonedDate.toISOString());
+  console.log('Formatted in timezone:', format(zonedDate, 'yyyy-MM-dd HH:mm:ss zzz', { timeZone: timezone }));
+  
+  return zonedDate;
+}
 
   private formatZonedDateDay(date: Date, timezone: string): string {
     return format(date, 'yyyy-MM-dd', { timeZone: timezone });

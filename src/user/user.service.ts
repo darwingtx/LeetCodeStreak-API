@@ -202,35 +202,51 @@ export class UserService {
   }
 
   async updateUserProfile(username: string) {
+    console.log('Updating user profile for:', username);
     const profile = await this.getProfileByUsername(username);
-    const updatedUser = await this.prisma.user.update({
-      where: { username: username },
-      data: {
-        username: profile.username,
-        githubUrl: profile.githubUrl,
-        twitterUrl: profile.twitterUrl,
-        linkedinUrl: profile.linkedinUrl,
-        realName: profile.profile?.realName,
-        profilePictureUrl: profile.profile?.userAvatar,
-        birthday: profile.profile?.birthday
-          ? new Date(profile.profile?.birthday)
-          : null,
-        ranking: profile.profile?.ranking ?? null,
-        reputation: profile.profile?.reputation ?? 0,
-        websiteUrl: profile.profile?.websites ?? [],
-        countryName: profile.profile?.countryName,
-        company: profile.profile?.company,
-        school: profile.profile?.school,
-        skillTags: profile.profile?.skillTags ?? [],
-        aboutMe: profile.profile?.aboutMe,
-        profileUrl: `https://leetcode.com/${username}`,
-        totalSubmissions: profile.submitStats?.acSubmissionNum?.[0]?.count ?? 0, 
-        updatedAt: new Date(),
-        acceptedSubmissions: profile.submitStats?.acSubmissionNum?.[0]?.submissions ?? 0,
-        
-      },
-    });
 
-    return updatedUser;
+    const data = {
+      username: profile.username,
+      githubUrl: profile.githubUrl,
+      twitterUrl: profile.twitterUrl,
+      linkedinUrl: profile.linkedinUrl,
+      realName: profile.profile?.realName,
+      profilePictureUrl: profile.profile?.userAvatar,
+      birthday: profile.profile?.birthday
+        ? new Date(profile.profile?.birthday)
+        : null,
+      ranking: profile.profile?.ranking ?? null,
+      reputation: profile.profile?.reputation ?? 0,
+      websiteUrl: profile.profile?.websites ?? [],
+      countryName: profile.profile?.countryName,
+      company: profile.profile?.company,
+      school: profile.profile?.school,
+      skillTags: profile.profile?.skillTags ?? [],
+      aboutMe: profile.profile?.aboutMe,
+      profileUrl: `https://leetcode.com/${username}`,
+      totalSubmissions: profile.submitStats?.acSubmissionNum?.[0]?.count ?? 0,
+      updatedAt: new Date(),
+      acceptedSubmissions:
+        profile.submitStats?.acSubmissionNum?.[0]?.submissions ?? 0,
+    };
+
+    try {
+      
+      const upserted = await this.prisma.user.upsert({
+        where: { username: profile.username }, // ← cambiar aquí
+        update: data,
+        create: data as any,
+      });
+
+      return upserted;
+    } catch (err) {
+      
+      if (err && err.code === 'P2025') {
+        throw new Error(
+          `Prisma P2025: failed to update or create user with username=${username}. Original message: ${err.message}`,
+        );
+      }
+      throw err;
+    }
   }
 }
