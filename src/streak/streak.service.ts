@@ -4,7 +4,7 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { toZonedTime, format } from 'date-fns-tz';
 import { addDays } from 'date-fns';
 import { Submission } from 'src/user/userTypes';
-
+import { sub } from 'date-fns/sub';
 
 @Injectable()
 export class StreakService {
@@ -45,11 +45,11 @@ export class StreakService {
     if (!user) {
       throw new Error(`User with id ${id} not found`);
     }
-    let lastSolvedDate: number = this.dateToTimestamp(user.lastProblemSolvedAt) || 0;;
+    let lastSolvedDate: number =
+      this.dateToTimestamp(user.lastProblemSolvedAt) || 0;
     if (this.isSameDay(lastSolvedDate, Date.now(), timezone)) {
-      return "User has already solved a problem today, no update needed.";
+      return 'User has already solved a problem today, no update needed.';
     }
-
 
     const query = `#graphql
     query getACSubmissions ($username: String!, $limit: Int) {
@@ -84,38 +84,63 @@ export class StreakService {
     const submissions: Submission[] = data.data.recentAcSubmissionList;
     let newStreak: number = 0;
     const lastDate: number = submissions[0]?.timestamp || 0;
-    if(this.isPreviousDay(lastDate, lastSolvedDate, timezone)){
-      
+    if (this.isPreviousDay(lastDate, lastSolvedDate, timezone)) {
+      newStreak = user.currentStreak + 1;
+      lastSolvedDate = lastDate;
     }
-    for (const submission of submissions) {
 
-      if (this.isSameDay(submission.timestamp, lastSolvedDate, timezone)) {
-        newStreak++;
-      } else if (
-        this.isPreviousDay(submission.timestamp, lastSolvedDate, timezone)
-      ) {
-        newStreak++;
-        lastSolvedDate = submission.timestamp;
-      }
-    }
-    console.log("--------------" + lastDate);
-    console.log('Last solved date (timestamp):', lastSolvedDate);
+    let streak = await this.prisma.streakHistory.create({
+      data: {
+        userId: id,
+        firstProblemAt: '',
+        problemsSolved: 0,
+        date: new Date(),
+      },
+    });
+
     user = await this.prisma.user.update({
       where: { id: id },
       data: {
         currentStreak: newStreak,
-        lastProblemSolvedAt: lastSolvedDate ? this.timestampToDate(lastSolvedDate) : null,
+        lastProblemSolvedAt: lastSolvedDate
+          ? this.timestampToDate(lastSolvedDate)
+          : null,
       },
     });
 
     return user;
   }
 
-  updateStreaksForAllUsers() {
+  updateStreaksForAllUsers() {}
 
-  }
-
-  updateAllStreakUser() {
+  async updateAllStreakUser(id: string, timeZone: string) {
+    let user = await this.prisma.user.findUnique({
+      where: { id: id },
+      select: {
+        id: true,
+        username: true,
+        lastProblemSolvedAt: true,
+        currentStreak: true,
+      },
+    });
+    if (!user) {
+      throw new Error(`User with id ${id} not found`);
+    }
+    const data = await this.queryACSubmissions(user.username!, 30);
+    const submissions: Submission[] = data.data.recentAcSubmissionList;
+    let lastSolvedDate: number = submissions[0]?.timestamp || 0;
+    let newStreak: number = 0;
+    let firstProblem: string = submissions[submissions.length - 1]?.title || '';
+    for (const submission of submissions) {
+      if (this.isSameDay(submission.timestamp, lastSolvedDate, timeZone)) {
+        newStreak++;
+      } else if (
+        this.isPreviousDay(submission.timestamp, lastSolvedDate, timeZone)
+      ) {
+        newStreak++;
+        lastSolvedDate = submission.timestamp;
+      }
+    }
     return `This action updates all streaks`;
   }
 
@@ -132,18 +157,21 @@ export class StreakService {
     return format(zonedDate, 'yyyy-MM-dd HH:mm:ssXXX', { timeZone: timezone });
   }
 
-private convertTimestampToZonedDate(
-  timestampInSeconds: number,
-  timezone: string,
-): Date {
-  const date = new Date(timestampInSeconds * 1000);
-  console.log('Timezone:', timezone);
-  
-  const zonedDate = toZonedTime(date, timezone);
-  console.log('Formatted in timezone:', format(zonedDate, 'yyyy-MM-dd HH:mm:ss zzz', { timeZone: timezone }));
-  
-  return zonedDate;
-}
+  private convertTimestampToZonedDate(
+    timestampInSeconds: number,
+    timezone: string,
+  ): Date {
+    const date = new Date(timestampInSeconds * 1000);
+    console.log('Timezone:', timezone);
+
+    const zonedDate = toZonedTime(date, timezone);
+    console.log(
+      'Formatted in timezone:',
+      format(zonedDate, 'yyyy-MM-dd HH:mm:ss zzz', { timeZone: timezone }),
+    );
+
+    return zonedDate;
+  }
 
   private formatZonedDateDay(date: Date, timezone: string): string {
     return format(date, 'yyyy-MM-dd', { timeZone: timezone });
@@ -175,10 +203,44 @@ private convertTimestampToZonedDate(
   }
 
   private dateToTimestamp(date: Date | null): number | null {
-  return date ? Math.floor(date.getTime() / 1000) : null;
-}
+    return date ? Math.floor(date.getTime() / 1000) : null;
+  }
 
-private timestampToDate(timestamp: number): Date {
-  return new Date(timestamp * 1000);
-}
+  private timestampToDate(timestamp: number): Date {
+    return new Date(timestamp * 1000);
+  }
+
+  private async queryACSubmissions(username: string, limit: number) {
+    const query = `#graphql
+    query getACSubmissions ($username: String!, $limit: Int) {
+    recentAcSubmissionList(username: $username, limit: $limit) {
+        title
+        titleSlug
+        timestamp
+        statusDisplay
+        lang
+    }
+}`;
+    const body = JSON.stringify({
+      query,
+      variables: { username: username, limit: limit },
+    });
+
+    if (!this.apiUrl) {
+      throw new Error('API_URL is not defined');
+    }
+
+    const res = await fetch(this.apiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body,
+    });
+
+    if (!res.ok) {
+      throw new Error(`Error en la request: ${res.statusText}`);
+    }
+
+    const data = await res.json();
+    return data;
+  }
 }

@@ -5,12 +5,13 @@ import { UserModule } from './user/user.module';
 import { PrismaService } from './prisma/prisma.service';
 import { ConfigModule } from '@nestjs/config';
 import { StreakModule } from './streak/streak.module';
+import { SubmissionModule } from './submission/submission.module';
 
 
 @Module({
   imports: [GroupModule, StreakModule, AuthModule, UserModule, ConfigModule.forRoot({
       isGlobal: true,
-    }),],
+    }), SubmissionModule,],
   providers: [PrismaService],
 })
 export class AppModule {}
