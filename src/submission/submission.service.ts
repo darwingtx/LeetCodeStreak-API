@@ -18,14 +18,31 @@ export class SubmissionService {
       }
 
     async createUserSubmission(userId: string, submissionData: Submission) {
+        const titleSlug = submissionData.title.toLowerCase().replace(/\s+/g, '-');
+        const submittedAt = timestampToDate(submissionData.timestamp);
+        
+        const existing = await this.prisma.userSubmission.findUnique({
+            where: {
+                userId_titleSlug_submittedAt: {
+                    userId,
+                    titleSlug,
+                    submittedAt,
+                },
+            },
+        });
+        
+        if (existing) {
+            return existing; // O lanzar un error, según tu lógica
+        }
+        
         return await this.prisma.userSubmission.create({
             data: {
                 userId,
                 title: submissionData.title,
-                titleSlug: submissionData.title.toLowerCase().replace(/\s+/g, '-'), // Convert to slug format
+                titleSlug,
                 statusDisplay: submissionData.statusDisplay,
-                submittedAt: timestampToDate(submissionData.timestamp),
-                language: submissionData.lang || 'unknown', // Or pass as parameter if available
+                submittedAt,
+                language: submissionData.lang || 'unknown',
             },
         });
     }

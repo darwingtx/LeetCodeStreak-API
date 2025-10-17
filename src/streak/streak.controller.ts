@@ -22,4 +22,9 @@ export class StreakController {
     resetStreak(@Param('id') id: string) {
         return this.streakService.resetStreakByUserId(id);
     }
+
+    @Patch('updateall/:id')
+    updateAllStreak(@Param('id') id: string, @Body() body: { timezone: string }) {
+        return this.streakService.updateAllStreakUser(id, body.timezone);
+    }
 }
