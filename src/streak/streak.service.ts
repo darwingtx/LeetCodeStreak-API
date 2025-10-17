@@ -233,7 +233,7 @@ export class StreakService {
     return streak;
   }
 
-    async getLatestFirstProblemAtForUser(userId: string) {
+  private async getLatestFirstProblemAtForUser(userId: string) {
       return await this.prisma.streakHistory.findFirst({
         where: { userId },
         orderBy: { date: 'desc' },
