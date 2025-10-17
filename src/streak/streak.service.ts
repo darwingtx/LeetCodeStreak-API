@@ -1,11 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { toZonedTime, format } from 'date-fns-tz';
 import { addDays } from 'date-fns';
 import { StreakHistory, Submission } from 'src/user/userTypes';
-import { sub } from 'date-fns/sub';
 import { SubmissionService } from 'src/submission/submission.service';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class StreakService {
@@ -44,73 +43,99 @@ export class StreakService {
         currentStreak: true,
       },
     });
+    
     if (!user) {
       throw new Error(`User with id ${id} not found`);
     }
-    let lastSolvedDate: number =
-      this.dateToTimestamp(user.lastProblemSolvedAt) || 0;
-    if (this.isSameDay(lastSolvedDate, Date.now(), timezone)) {
-      return 'User has already solved a problem today, no update needed.';
-    }
 
-    const query = `#graphql
-    query getACSubmissions ($username: String!, $limit: Int) {
-    recentAcSubmissionList(username: $username, limit: $limit) {
-        title
-        titleSlug
-        timestamp
-        statusDisplay
-        lang
-    }
-}`;
-    const body = JSON.stringify({
-      query,
-      variables: { username: user.username, limit: 30 },
-    });
+    let streak = user.currentStreak;
+    
 
-    if (!this.apiUrl) {
-      throw new Error('API_URL is not defined');
-    }
-
-    const res = await fetch(this.apiUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body,
-    });
-
-    if (!res.ok) {
-      throw new Error(`Error en la request: ${res.statusText}`);
-    }
-
-    const data = await res.json();
+    // Get latest AC submissions
+    const data = await this.queryACSubmissions(user.username!, 1);
     const submissions: Submission[] = data.data.recentAcSubmissionList;
-    let newStreak: number = 0;
-    const lastDate: number = submissions[0]?.timestamp || 0;
-    if (this.isPreviousDay(lastDate, lastSolvedDate, timezone)) {
-      newStreak = user.currentStreak + 1;
-      lastSolvedDate = lastDate;
+    let firstProblemAtTs: number = 0;
+    if (submissions.length === 0) {
+      return user; // No new submissions
+    }
+    
+    const latestSubmission = submissions[0];
+    if (streak === 0) {
+      firstProblemAtTs = latestSubmission.timestamp;
+    } else {
+      const latest = await this.getLatestFirstProblemAtForUser(id);
+      firstProblemAtTs = latest?.firstProblemAt
+        ? Math.floor(latest.firstProblemAt.getTime() / 1000)
+        : 0;
+    }
+    const lastSolvedTs = this.dateToTimestamp(user.lastProblemSolvedAt) || 0;
+
+    // Check if we already processed this problem today
+    if (this.isSameDay(latestSubmission.timestamp, Date.now() / 1000, timezone)) {
+      // Check if it's exactly the same problem we already saved
+      if (lastSolvedTs === latestSubmission.timestamp) {
+        return user;
+      } else {
+        // Different problem solved today, save and update lastProblemSolvedAt
+        await this.submissionService.createUserSubmission(user.id!, latestSubmission);
+        
+        const updatedUser = await this.prisma.user.update({
+          where: { id: id },
+          data: {
+            lastProblemSolvedAt: this.timestampToDate(latestSubmission.timestamp),
+          },
+        });
+        
+        return updatedUser;
+      }
     }
 
-    let streak = await this.prisma.streakHistory.create({
-      data: {
-        userId: id,
-        firstProblemAt: '',
-        problemsSolved: 0,
-        date: new Date(),
-      },
-    });
+    // Save the new submission
+    await this.submissionService.createUserSubmission(user.id!, latestSubmission);
 
-    user = await this.prisma.user.update({
+    let newStreak = user.currentStreak;
+    let shouldUpdateHistory = false;
+
+    if (lastSolvedTs === 0) {
+      // First submission ever
+      newStreak = 1;
+      shouldUpdateHistory = true;
+    } else if (this.isSameDay(latestSubmission.timestamp, lastSolvedTs, timezone)) {
+      // Same day, keep streak (submission already saved)
+      return user;
+    } else if (this.isPreviousDay(latestSubmission.timestamp, lastSolvedTs, timezone)) {
+      // Consecutive day, increment streak
+      newStreak = user.currentStreak + 1;
+      shouldUpdateHistory = true;
+    } else {
+      // Streak break, streak = 1
+      newStreak = 1;
+      shouldUpdateHistory = true;
+    }
+
+    // SAVE streak history if needed
+    if (shouldUpdateHistory) {
+      await this.createStreakHistoryForUser({
+        userId: id,
+        firstProblemAt: this.convertTimestampToTimezoneDate(
+          latestSubmission.timestamp,
+          timezone,
+        ),
+        problemsSolved: newStreak,
+        date: new Date(),
+      });
+    }
+
+    // Update user with new streak
+    const updatedUser = await this.prisma.user.update({
       where: { id: id },
       data: {
         currentStreak: newStreak,
-        lastProblemSolvedAt: lastSolvedDate
-          ? this.timestampToDate(lastSolvedDate)
-          : null,
+        lastProblemSolvedAt: this.timestampToDate(latestSubmission.timestamp),
       },
     });
 
-    return user;
+    return updatedUser;
   }
 
   updateStreaksForAllUsers() { }
@@ -207,6 +232,16 @@ export class StreakService {
     });
     return streak;
   }
+
+    async getLatestFirstProblemAtForUser(userId: string) {
+      return await this.prisma.streakHistory.findFirst({
+        where: { userId },
+        orderBy: { date: 'desc' },
+        select: {
+          firstProblemAt: true,
+        },
+      });
+    }
 
   resetStreakByUserId(id: string) {
     return `This action resets the streak for user with id: ${id}`;
