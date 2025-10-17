@@ -2,9 +2,9 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { toZonedTime, format } from 'date-fns-tz';
-import { differenceInCalendarDays, addDays } from 'date-fns';
+import { addDays } from 'date-fns';
 import { Submission } from 'src/user/userTypes';
-import { last } from 'rxjs';
+
 
 @Injectable()
 export class StreakService {
@@ -114,8 +114,6 @@ export class StreakService {
   ): string {
     const date = new Date(timestampInSeconds * 1000);
     const zonedDate = toZonedTime(date, timezone);
-
-    console.log('Zoned Date:', zonedDate);
     return format(zonedDate, 'yyyy-MM-dd HH:mm:ssXXX', { timeZone: timezone });
   }
 
@@ -124,11 +122,9 @@ private convertTimestampToZonedDate(
   timezone: string,
 ): Date {
   const date = new Date(timestampInSeconds * 1000);
-  console.log('Original UTC date:', date.toISOString());
   console.log('Timezone:', timezone);
   
   const zonedDate = toZonedTime(date, timezone);
-  console.log('Zoned date (represents local time):', zonedDate.toISOString());
   console.log('Formatted in timezone:', format(zonedDate, 'yyyy-MM-dd HH:mm:ss zzz', { timeZone: timezone }));
   
   return zonedDate;
