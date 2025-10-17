@@ -3,8 +3,9 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { toZonedTime, format } from 'date-fns-tz';
 import { addDays } from 'date-fns';
-import { Submission } from 'src/user/userTypes';
+import { StreakHistory, Submission } from 'src/user/userTypes';
 import { sub } from 'date-fns/sub';
+import { SubmissionService } from 'src/submission/submission.service';
 
 @Injectable()
 export class StreakService {
@@ -13,6 +14,7 @@ export class StreakService {
   constructor(
     private configService: ConfigService,
     private prisma: PrismaService,
+    private submissionService: SubmissionService,
   ) {
     this.configService = configService;
     this.apiUrl = this.configService.get<string>('API_URL');
@@ -111,7 +113,7 @@ export class StreakService {
     return user;
   }
 
-  updateStreaksForAllUsers() {}
+  updateStreaksForAllUsers() { }
 
   async updateAllStreakUser(id: string, timeZone: string) {
     let user = await this.prisma.user.findUnique({
@@ -126,22 +128,84 @@ export class StreakService {
     if (!user) {
       throw new Error(`User with id ${id} not found`);
     }
+
     const data = await this.queryACSubmissions(user.username!, 30);
     const submissions: Submission[] = data.data.recentAcSubmissionList;
-    let lastSolvedDate: number = submissions[0]?.timestamp || 0;
-    let newStreak: number = 0;
-    let firstProblem: string = submissions[submissions.length - 1]?.title || '';
-    for (const submission of submissions) {
-      if (this.isSameDay(submission.timestamp, lastSolvedDate, timeZone)) {
-        newStreak++;
+
+    if (submissions.length === 0) {
+      return user;
+    }
+
+    const processedDays = new Set<string>();
+    let currentStreakCount = 0;
+    let lastProcessedTs = 0;
+    let firstProblemAtTs = 0; 
+    
+    for (let i = submissions.length - 1; i >= 0; i--) {
+      const submission = submissions[i];
+
+      await this.submissionService.createUserSubmission(user.id!, submission);
+
+      const submissionDay = this.formatZonedDateDay(
+        this.convertTimestampToZonedDate(submission.timestamp, timeZone),
+        timeZone,
+      );
+
+      if (processedDays.has(submissionDay)) {
+        continue;
+      }
+
+      processedDays.add(submissionDay);
+
+      if (currentStreakCount === 0) {
+        currentStreakCount = 1;
+        lastProcessedTs = submission.timestamp;
+        firstProblemAtTs = submission.timestamp; // ✅ Actualizar aquí
       } else if (
-        this.isPreviousDay(submission.timestamp, lastSolvedDate, timeZone)
+        this.isPreviousDay(submission.timestamp, lastProcessedTs, timeZone)
       ) {
-        newStreak++;
-        lastSolvedDate = submission.timestamp;
+        currentStreakCount++;
+        lastProcessedTs = submission.timestamp;
+      } else {
+        break;
       }
     }
-    return `This action updates all streaks`;
+
+    // Save streak history only if there's an active streak
+    if (currentStreakCount > 0) {
+      await this.createStreakHistoryForUser({
+        userId: id,
+        firstProblemAt: this.convertTimestampToTimezoneDate(
+          firstProblemAtTs,
+          timeZone,
+        ),
+        problemsSolved: currentStreakCount,
+        date: new Date(),
+      });
+    }
+
+    // Actualizar usuario con el nuevo streak
+    const updatedUser = await this.prisma.user.update({
+      where: { id: id },
+      data: {
+        currentStreak: currentStreakCount,
+        lastProblemSolvedAt: this.timestampToDate(submissions[0].timestamp),
+      },
+    });
+
+    return updatedUser;
+  }
+
+  async createStreakHistoryForUser(streakHistory: StreakHistory) {
+    let streak = await this.prisma.streakHistory.create({
+      data: {
+        userId: streakHistory.userId,
+        firstProblemAt: streakHistory.firstProblemAt,
+        problemsSolved: streakHistory.problemsSolved,
+        date: streakHistory.date,
+      },
+    });
+    return streak;
   }
 
   resetStreakByUserId(id: string) {

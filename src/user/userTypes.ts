@@ -20,6 +20,13 @@ export interface Submission {
   lang: string;
 }
 
+export interface StreakHistory {
+  userId: string;
+  firstProblemAt: string;
+  problemsSolved: number;
+  date: Date;
+}
+
 export interface DifficultyCount {
   difficulty: 'All' | 'Easy' | 'Medium' | 'Hard' | string;
   count: number;
