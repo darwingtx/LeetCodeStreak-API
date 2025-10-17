@@ -178,6 +178,7 @@ export class StreakService {
     let currentStreakCount = 0;
     let lastProcessedTs = submissions[submissions.length - 1]?.timestamp || 0;
     let firstProblemAtTs = 0;
+    let numProblemsSolved = 0;
 
     for (let i = submissions.length - 1; i >= 0; i--) {
       const submission = submissions[i];
@@ -190,6 +191,7 @@ export class StreakService {
       );
 
       if (processedDays.has(submissionDay)) {
+        numProblemsSolved++;
         lastProcessedTs = submission.timestamp;
         continue;
       }
@@ -197,25 +199,23 @@ export class StreakService {
       processedDays.add(submissionDay);
 
       if (currentStreakCount === 0) {
+        numProblemsSolved++;
         currentStreakCount = 1;
         lastProcessedTs = submission.timestamp;
         firstProblemAtTs = submission.timestamp;
       } else if (
         this.isNextDay(submission.timestamp, lastProcessedTs, timeZone)
       ) {
-        // Día consecutivo
+        numProblemsSolved++;
         currentStreakCount++;
         lastProcessedTs = submission.timestamp;
       } else {
         currentStreakCount = 1;
+        numProblemsSolved = 1;
         firstProblemAtTs = submission.timestamp;
         lastProcessedTs = submission.timestamp;
       }
-      console.log('---Current Streak Count:', currentStreakCount);
-    }
-
-    // Save streak history only if there's an active streak
-    if (currentStreakCount > 0) {
+      if (currentStreakCount > 0) {
       await this.createStreakHistoryForUser({
         userId: id,
         firstProblemAt: this.convertTimestampToTimezoneDate(
@@ -223,11 +223,13 @@ export class StreakService {
           timeZone,
         ),
         problemsSolved: currentStreakCount,
-        date: new Date(),
+        date: timestampToDate(lastProcessedTs),
       });
     }
+      console.log('---Current Streak Count:', currentStreakCount);
+    }
 
-    // Actualizar usuario con el nuevo streak
+
     const updatedUser = await this.prisma.user.update({
       where: { id: id },
       data: {
@@ -240,26 +242,34 @@ export class StreakService {
   }
 
   async createStreakHistoryForUser(streakHistory: StreakHistory) {
-    const existingStreak = streakHistory.date;
+    const existingStreakDate = streakHistory.date;
 
     const exist = await this.prisma.streakHistory.findFirst({
       where: {
         userId: streakHistory.userId,
-        date: existingStreak,
+        date: existingStreakDate,
       },
     });
 
     if (exist) {
+      await this.prisma.streakHistory.update({
+        where: { id: exist.id },
+        data: {
+          problemsSolved: streakHistory.problemsSolved,
+        },
+      });
       return exist;
     }
-    let streak = await this.prisma.streakHistory.create({
+
+    const streak = await this.prisma.streakHistory.create({
       data: {
         userId: streakHistory.userId,
         firstProblemAt: streakHistory.firstProblemAt,
         problemsSolved: streakHistory.problemsSolved,
-        date: streakHistory.date,
+        date: existingStreakDate,
       },
     });
+
     return streak;
   }
 
