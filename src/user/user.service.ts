@@ -2,6 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { MatchedUser, UserDataProfile } from './userTypes';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
+import { formatInTimeZone } from 'date-fns-tz'; 
+
 
 @Injectable()
 export class UserService {
@@ -201,7 +203,7 @@ export class UserService {
     return user;
   }
 
-  async updateUserProfile(username: string) {
+  async updateUserProfile(username: string, timeZone: string) {
     console.log('Updating user profile for:', username);
     const profile = await this.getProfileByUsername(username);
 
@@ -228,6 +230,7 @@ export class UserService {
       updatedAt: new Date(),
       acceptedSubmissions:
         profile.submitStats?.acSubmissionNum?.[0]?.submissions ?? 0,
+      timezone: this.getUTCOffset(timeZone),
     };
 
     try {
@@ -247,6 +250,19 @@ export class UserService {
         );
       }
       throw err;
+    }
+  }
+
+  private getUTCOffset(timezone: string): string {
+    try {
+      const now = new Date();
+      // Use formatInTimeZone from date-fns-tz to get the offset
+      const offset = formatInTimeZone(now, timezone, 'XXX');
+      console.log(`Calculated offset for timezone ${timezone}: ${offset}`);
+      return `UTC${offset}`;
+    } catch (error) {
+      console.error(`Invalid timezone: ${timezone}`, error);
+      return 'UTC+00:00';
     }
   }
 }

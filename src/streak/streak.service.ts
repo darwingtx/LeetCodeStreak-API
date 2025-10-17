@@ -45,6 +45,11 @@ export class StreakService {
     if (!user) {
       throw new Error(`User with id ${id} not found`);
     }
+    let lastSolvedDate: number = this.dateToTimestamp(user.lastProblemSolvedAt) || 0;;
+    if (this.isSameDay(lastSolvedDate, Date.now(), timezone)) {
+      return "User has already solved a problem today, no update needed.";
+    }
+
 
     const query = `#graphql
     query getACSubmissions ($username: String!, $limit: Int) {
@@ -60,9 +65,11 @@ export class StreakService {
       query,
       variables: { username: user.username, limit: 30 },
     });
+
     if (!this.apiUrl) {
       throw new Error('API_URL is not defined');
     }
+
     const res = await fetch(this.apiUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -76,13 +83,12 @@ export class StreakService {
     const data = await res.json();
     const submissions: Submission[] = data.data.recentAcSubmissionList;
     let newStreak: number = 0;
-    let lastSolvedDate: number = submissions[0]?.timestamp || 0;
     const lastDate: number = submissions[0]?.timestamp || 0;
+    if(this.isPreviousDay(lastDate, lastSolvedDate, timezone)){
+      
+    }
     for (const submission of submissions) {
-      const submissionDate = this.convertTimestampToTimezoneDate(
-        submission.timestamp,
-        timezone,
-      );
+
       if (this.isSameDay(submission.timestamp, lastSolvedDate, timezone)) {
         newStreak++;
       } else if (
@@ -98,12 +104,21 @@ export class StreakService {
       where: { id: id },
       data: {
         currentStreak: newStreak,
-        lastProblemSolvedAt: this.convertTimestampToZonedDate(lastDate, timezone),
+        lastProblemSolvedAt: lastSolvedDate ? this.timestampToDate(lastSolvedDate) : null,
       },
     });
 
     return user;
   }
+
+  updateStreaksForAllUsers() {
+
+  }
+
+  updateAllStreakUser() {
+    return `This action updates all streaks`;
+  }
+
   resetStreakByUserId(id: string) {
     return `This action resets the streak for user with id: ${id}`;
   }
@@ -158,4 +173,12 @@ private convertTimestampToZonedDate(
     );
     return subDay === prevDay;
   }
+
+  private dateToTimestamp(date: Date | null): number | null {
+  return date ? Math.floor(date.getTime() / 1000) : null;
+}
+
+private timestampToDate(timestamp: number): Date {
+  return new Date(timestamp * 1000);
+}
 }

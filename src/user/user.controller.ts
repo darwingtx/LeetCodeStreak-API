@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Patch } from '@nestjs/common';
+import { Controller, Get, Param, Patch , Body} from '@nestjs/common';
 import { UserService } from './user.service';
 
 @Controller('user')
@@ -14,7 +14,7 @@ export class UserController {
     }
 
     @Patch('update/:username')
-    updateUser(@Param('username') username: string) {
-        return this.userService.updateUserProfile(username);
+    updateUser(@Param('username') username: string, @Body() body: { timezone: string }) {
+        return this.userService.updateUserProfile(username, body.timezone);
     }
 }
