@@ -36,6 +36,7 @@ export class StreakService {
   }
 
   async updateStreakByUserId(id: string, timezone: string) {
+
     let user = await this.prisma.user.findUnique({
       where: { id: id },
       select: {
@@ -54,6 +55,8 @@ export class StreakService {
 
     // Get latest AC submissions
     const data = await this.queryACSubmissions(user.username!, 1);
+    console.log('AC Submissions Data:', data.data);
+    
     const submissions: Submission[] = data.data.recentAcSubmissionList;
     let firstProblemAtTs: number = 0;
     if (submissions.length === 0) {
@@ -70,11 +73,11 @@ export class StreakService {
         : 0;
     }
     const lastSolvedTs = dateToTimestamp(user.lastProblemSolvedAt) || 0;
-
+    console.log('Latest Submission Timestamp:', latestSubmission.timestamp);
+    console.log('Last Solved Timestamp:', lastSolvedTs);
+    console.log('First Problem At Timestamp:', firstProblemAtTs);
     // Check if we already processed this problem today
-    if (
-      this.isSameDay(latestSubmission.timestamp, Date.now() / 1000, timezone)
-    ) {
+    if (this.isSameDay(latestSubmission.timestamp, Date.now() / 1000, timezone)) {
       // Check if it's exactly the same problem we already saved
       if (lastSolvedTs === latestSubmission.timestamp) {
         return user;
@@ -88,6 +91,7 @@ export class StreakService {
         const updatedUser = await this.prisma.user.update({
           where: { id: id },
           data: {
+            currentStreak: user.currentStreak + 1,
             lastProblemSolvedAt: timestampToDate(latestSubmission.timestamp),
           },
         });
