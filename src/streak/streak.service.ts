@@ -5,7 +5,14 @@ import { addDays } from 'date-fns';
 import { StreakHistory, Submission, UserStreak } from 'src/user/userTypes';
 import { SubmissionService } from 'src/submission/submission.service';
 import { ConfigService } from '@nestjs/config';
-import { dateToTimestamp, getIANATimezone, timestampToDate } from 'src/Utils/Time';
+import {
+  convertTimestampToTimezoneDate,
+  convertTimestampToZonedDate,
+  dateToTimestamp,
+  formatZonedDateDay,
+  getIANATimezone,
+  timestampToDate,
+} from 'src/Utils/Time';
 import { Cron } from '@nestjs/schedule';
 
 @Injectable()
@@ -55,7 +62,7 @@ export class StreakService {
 
     // Get latest AC submissions
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const data = await this.queryACSubmissions(user.username, 1);
+    const data = await this.queryACSubmissions(user.username, 5);
 
     const submissions: Submission[] = data.data.recentAcSubmissionList;
     let firstProblemAtTs: number = 0;
@@ -73,10 +80,6 @@ export class StreakService {
         : 0;
     }
     const lastSolvedTs = dateToTimestamp(user.lastProblemSolvedAt) || 0;
-
-    // Check if we already processed this problem today
-
-
     // Save the new submission
     await this.submissionService.createUserSubmission(
       user.id,
@@ -111,7 +114,7 @@ export class StreakService {
     if (shouldUpdateHistory) {
       await this.createStreakHistoryForUser({
         userId: id,
-        firstProblemAt: this.convertTimestampToTimezoneDate(
+        firstProblemAt: convertTimestampToTimezoneDate(
           latestSubmission.timestamp,
           timezone,
         ),
@@ -125,7 +128,7 @@ export class StreakService {
       where: { id: id },
       data: {
         currentStreak: newStreak,
-        lastProblemSolvedAt: this.timestampToDate(latestSubmission.timestamp),
+        lastProblemSolvedAt: timestampToDate(latestSubmission.timestamp),
       },
     });
 
@@ -133,7 +136,6 @@ export class StreakService {
   }
 
   @Cron('0 */3 * * *')
-
   async updateStreaksForAllUsers() {
     const users = await this.prisma.user.findMany({
       select: {
@@ -144,7 +146,7 @@ export class StreakService {
         currentStreak: true,
       },
     });
-    if(users.length === 0) {
+    if (users.length === 0) {
       throw new Error('No users found');
     }
     const userStreaks: UserStreak[] = users.map((user) => ({
@@ -156,13 +158,13 @@ export class StreakService {
     }));
 
     for (const user of userStreaks) {
-        this.updateStreakByUserId(user.id, getIANATimezone(user.timezone));
+      this.updateStreakByUserId(user.id, getIANATimezone(user.timezone));
     }
 
-    return "Streaks updated for all users";
-
+    return 'Streaks updated for all users';
   }
-  @Cron('59 23 * * *')  // A las 11:59 PM todos los días
+
+  @Cron('59 23 * * *')
   async updateStreaksForAllUsersAtEndOfDay() {
     await this.updateStreaksForAllUsers();
   }
@@ -286,10 +288,6 @@ export class StreakService {
     return streak;
   }
 
-  resetStreakByUserId(id: string) {
-    return `This action resets the streak for user with id: ${id}`;
-  }
-
   private async getLatestFirstProblemAtForUser(userId: string) {
     return await this.prisma.streakHistory.findFirst({
       where: { userId },
@@ -300,42 +298,10 @@ export class StreakService {
     });
   }
 
-  private convertTimestampToTimezoneDate(
-    timestampInSeconds: number,
-    timezone: string,
-  ): string {
-    const date = new Date(timestampInSeconds * 1000);
-    const zonedDate = toZonedTime(date, timezone);
-    return format(zonedDate, 'yyyy-MM-dd HH:mm:ssXXX', { timeZone: timezone });
-  }
-
-  private convertTimestampToZonedDate(
-    timestampInSeconds: number,
-    timezone: string,
-  ): Date {
-    const date = new Date(timestampInSeconds * 1000);
-    console.log('Timezone:', timezone);
-
-    const zonedDate = toZonedTime(date, timezone);
-    console.log(
-      'Formatted in timezone:',
-      format(zonedDate, 'yyyy-MM-dd HH:mm:ss zzz', { timeZone: timezone }),
-    );
-
-    return zonedDate;
-  }
-
-  private formatZonedDateDay(date: Date, timezone: string): string {
-    return format(date, 'yyyy-MM-dd', { timeZone: timezone });
-  }
-
   private isSameDay(tsA: number, tsB: number, timezone: string): boolean {
-    const a = this.convertTimestampToZonedDate(tsA, timezone);
-    const b = this.convertTimestampToZonedDate(tsB, timezone);
-    return (
-      this.formatZonedDateDay(a, timezone) ===
-      this.formatZonedDateDay(b, timezone)
-    );
+    const a = convertTimestampToZonedDate(tsA, timezone);
+    const b = convertTimestampToZonedDate(tsB, timezone);
+    return formatZonedDateDay(a, timezone) === formatZonedDateDay(b, timezone);
   }
 
   private isPreviousDay(
@@ -343,21 +309,17 @@ export class StreakService {
     lastSolvedTs: number,
     timezone: string,
   ): boolean {
-    const subDay = this.formatZonedDateDay(
-      this.convertTimestampToZonedDate(submissionTs, timezone),
+    const subDay = formatZonedDateDay(
+      convertTimestampToZonedDate(submissionTs, timezone),
       timezone,
     );
     console.log('Submission Day:', subDay);
-    const prevDay = this.formatZonedDateDay(
-      addDays(this.convertTimestampToZonedDate(lastSolvedTs, timezone), -1),
+    const prevDay = formatZonedDateDay(
+      addDays(convertTimestampToZonedDate(lastSolvedTs, timezone), -1),
       timezone,
     );
     console.log('Previous Day:', prevDay);
     return subDay === prevDay;
-  }
-
-  private timestampToDate(timestamp: number): Date {
-    return new Date(timestamp * 1000);
   }
 
   private async queryACSubmissions(username: string, limit: number) {
@@ -400,11 +362,11 @@ export class StreakService {
     timezone: string,
   ): boolean {
     const subDay = this.formatZonedDateDay(
-      this.convertTimestampToZonedDate(submissionTs, timezone),
+      convertTimestampToZonedDate(submissionTs, timezone),
       timezone,
     );
     const nextDay = this.formatZonedDateDay(
-      addDays(this.convertTimestampToZonedDate(lastSolvedTs, timezone), 1), // +1 en lugar de -1
+      addDays(convertTimestampToZonedDate(lastSolvedTs, timezone), 1),
       timezone,
     );
     return subDay === nextDay;

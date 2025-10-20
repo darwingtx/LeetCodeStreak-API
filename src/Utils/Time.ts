@@ -1,4 +1,4 @@
-import { formatInTimeZone } from 'date-fns-tz';
+import { format, formatInTimeZone, toZonedTime } from 'date-fns-tz';
 
 export function timestampToDate(timestamp: number): Date {
   return new Date(timestamp * 1000);
@@ -79,3 +79,31 @@ export function getIANATimezone(utcOffset: string | null): string {
   }
 }
 
+export function convertTimestampToTimezoneDate(
+  timestampInSeconds: number,
+  timezone: string,
+): string {
+  const date = new Date(timestampInSeconds * 1000);
+  const zonedDate = toZonedTime(date, timezone);
+  return format(zonedDate, 'yyyy-MM-dd HH:mm:ssXXX', { timeZone: timezone });
+}
+
+export function convertTimestampToZonedDate(
+  timestampInSeconds: number,
+  timezone: string,
+): Date {
+  const date = new Date(timestampInSeconds * 1000);
+  console.log('Timezone:', timezone);
+
+  const zonedDate = toZonedTime(date, timezone);
+  console.log(
+    'Formatted in timezone:',
+    format(zonedDate, 'yyyy-MM-dd HH:mm:ss zzz', { timeZone: timezone }),
+  );
+
+  return zonedDate;
+}
+
+export function formatZonedDateDay(date: Date, timezone: string): string {
+    return format(date, 'yyyy-MM-dd', { timeZone: timezone });
+  }
