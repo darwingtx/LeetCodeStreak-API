@@ -1,9 +1,8 @@
 import { Injectable } from '@nestjs/common';
-import { MatchedUser, UserDataProfile } from './userTypes';
+import { MatchedUser } from './userTypes';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
-import { formatInTimeZone } from 'date-fns-tz'; 
-
+import { getUTCOffset } from '../Utils/Time';
 
 @Injectable()
 export class UserService {
@@ -230,11 +229,10 @@ export class UserService {
       updatedAt: new Date(),
       acceptedSubmissions:
         profile.submitStats?.acSubmissionNum?.[0]?.submissions ?? 0,
-      timezone: this.getUTCOffset(timeZone),
+      timezone: getUTCOffset(timeZone),
     };
 
     try {
-      
       const upserted = await this.prisma.user.upsert({
         where: { username: profile.username }, // ← cambiar aquí
         update: data,
@@ -243,7 +241,6 @@ export class UserService {
 
       return upserted;
     } catch (err) {
-      
       if (err && err.code === 'P2025') {
         throw new Error(
           `Prisma P2025: failed to update or create user with username=${username}. Original message: ${err.message}`,
@@ -253,16 +250,4 @@ export class UserService {
     }
   }
 
-  private getUTCOffset(timezone: string): string {
-    try {
-      const now = new Date();
-      // Use formatInTimeZone from date-fns-tz to get the offset
-      const offset = formatInTimeZone(now, timezone, 'XXX');
-      console.log(`Calculated offset for timezone ${timezone}: ${offset}`);
-      return `UTC${offset}`;
-    } catch (error) {
-      console.error(`Invalid timezone: ${timezone}`, error);
-      return 'UTC+00:00';
-    }
-  }
 }
