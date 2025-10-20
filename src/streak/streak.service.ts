@@ -201,8 +201,8 @@ export class StreakService {
 
       await this.submissionService.createUserSubmission(user.id, submission);
 
-      const submissionDay = this.formatZonedDateDay(
-        this.convertTimestampToZonedDate(submission.timestamp, timeZone),
+      const submissionDay = formatZonedDateDay(
+        convertTimestampToZonedDate(submission.timestamp, timeZone),
         timeZone,
       );
 
@@ -234,7 +234,7 @@ export class StreakService {
       if (currentStreakCount > 0) {
         await this.createStreakHistoryForUser({
           userId: id,
-          firstProblemAt: this.convertTimestampToTimezoneDate(
+          firstProblemAt: convertTimestampToTimezoneDate(
             firstProblemAtTs,
             timeZone,
           ),
@@ -249,7 +249,7 @@ export class StreakService {
       where: { id: id },
       data: {
         currentStreak: currentStreakCount,
-        lastProblemSolvedAt: this.timestampToDate(submissions[0].timestamp),
+        lastProblemSolvedAt: timestampToDate(submissions[0].timestamp),
       },
     });
 
@@ -361,11 +361,11 @@ export class StreakService {
     lastSolvedTs: number,
     timezone: string,
   ): boolean {
-    const subDay = this.formatZonedDateDay(
+    const subDay = formatZonedDateDay(
       convertTimestampToZonedDate(submissionTs, timezone),
       timezone,
     );
-    const nextDay = this.formatZonedDateDay(
+    const nextDay = formatZonedDateDay(
       addDays(convertTimestampToZonedDate(lastSolvedTs, timezone), 1),
       timezone,
     );
