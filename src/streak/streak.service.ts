@@ -351,7 +351,7 @@ export class StreakService {
     return subDay === nextDay;
   }
 
-  private async updateStreakBD(userId: string) {
+  async updateStreakBD(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -369,7 +369,7 @@ export class StreakService {
 
     const userSubmissions = await this.prisma.userSubmission.findMany({
       where: { userId: userId },
-      orderBy: { submittedAt: 'asc' },
+      orderBy: { submittedAt: 'desc' },
     });
 
     
@@ -385,8 +385,21 @@ export class StreakService {
       user.id,
       submissions,
       getIANATimezone(user.timezone),
-      user.currentStreak,
+      0,
     );
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        currentStreak: streak,
+        lastProblemSolvedAt:
+          submissions.length > 0
+            ? timestampToDate(submissions[0].timestamp)
+            : user.lastProblemSolvedAt,
+      },
+    });
+
+    
 
     return streak;
   }

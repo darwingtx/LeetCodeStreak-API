@@ -26,4 +26,9 @@ export class StreakController {
   updateAllStreak(@Param('id') id: string, @Body() body: { timezone: string }) {
     return this.streakService.updateAllStreakUser(id, body.timezone);
   }
+
+  @Post('updatebd/:id')
+  updateStreakBD(@Param('id') id: string) {
+    return this.streakService.updateStreakBD(id);
+  }
 }
