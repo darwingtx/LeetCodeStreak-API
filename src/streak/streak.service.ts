@@ -97,13 +97,11 @@ export class StreakService {
           user.id,
           submissions,
           getIANATimezone(user.timezone),
-          streak
+          streak,
         );
-        
       }
     }
     const latestSubmission = submissions[0];
-
 
     // Update user with new streak
     const updatedUser = await this.prisma.user.update({
@@ -183,7 +181,7 @@ export class StreakService {
       id,
       submissions,
       timeZone,
-      user.currentStreak
+      user.currentStreak,
     );
 
     const updatedUser = await this.prisma.user.update({
@@ -303,30 +301,6 @@ export class StreakService {
     });
   }
 
-  private isSameDay(tsA: number, tsB: number, timezone: string): boolean {
-    const a = convertTimestampToZonedDate(tsA, timezone);
-    const b = convertTimestampToZonedDate(tsB, timezone);
-    return formatZonedDateDay(a, timezone) === formatZonedDateDay(b, timezone);
-  }
-
-  private isPreviousDay(
-    submissionTs: number,
-    lastSolvedTs: number,
-    timezone: string,
-  ): boolean {
-    const subDay = formatZonedDateDay(
-      convertTimestampToZonedDate(submissionTs, timezone),
-      timezone,
-    );
-    console.log('Submission Day:', subDay);
-    const prevDay = formatZonedDateDay(
-      addDays(convertTimestampToZonedDate(lastSolvedTs, timezone), -1),
-      timezone,
-    );
-    console.log('Previous Day:', prevDay);
-    return subDay === prevDay;
-  }
-
   private async queryACSubmissions(username: string, limit: number) {
     const query = `#graphql
     query getACSubmissions ($username: String!, $limit: Int) {
@@ -375,5 +349,45 @@ export class StreakService {
       timezone,
     );
     return subDay === nextDay;
+  }
+
+  private async updateStreakBD(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        username: true,
+        lastProblemSolvedAt: true,
+        currentStreak: true,
+        timezone: true,
+      },
+    });
+
+    if (!user) {
+      throw new Error(`User with id ${userId} not found`);
+    }
+
+    const userSubmissions = await this.prisma.userSubmission.findMany({
+      where: { userId: userId },
+      orderBy: { submittedAt: 'asc' },
+    });
+
+    
+    const submissions: Submission[] = userSubmissions.map((sub) => ({
+      title: sub.title,
+      titleSlug: sub.titleSlug,
+      timestamp: dateToTimestamp(sub.submittedAt) ?? 0,
+      statusDisplay: sub.statusDisplay,
+      lang: sub.language,
+    }));
+
+    const streak = await this.processSubmissionsAndUpdateStreak(
+      user.id,
+      submissions,
+      getIANATimezone(user.timezone),
+      user.currentStreak,
+    );
+
+    return streak;
   }
 }
