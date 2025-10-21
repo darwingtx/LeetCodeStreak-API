@@ -225,11 +225,10 @@ export class UserService {
       skillTags: profile.profile?.skillTags ?? [],
       aboutMe: profile.profile?.aboutMe,
       profileUrl: `https://leetcode.com/${username}`,
-      totalSubmissions: profile.submitStats?.acSubmissionNum?.[0]?.count ?? 0,
+      totalSubmissions: profile.submitStats?.acSubmissionNum?.[0]?.submissions ?? 0,
       updatedAt: new Date(),
-      acceptedSubmissions:
-        profile.submitStats?.acSubmissionNum?.[0]?.submissions ?? 0,
       timezone: getUTCOffset(timeZone),
+      totalProblemsSolved: profile.submitStats?.acSubmissionNum?.[0]?.count ?? 0,
     };
 
     try {

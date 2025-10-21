@@ -42,7 +42,6 @@ model User {
   
   // Submission stats
   totalSubmissions    Int @default(0) @map("total_submissions")
-  acceptedSubmissions Int @default(0) @map("accepted_submissions")
   easyCount           Int @default(0) @map("easy_count")
   mediumCount         Int @default(0) @map("medium_count")
   hardCount           Int @default(0) @map("hard_count")
