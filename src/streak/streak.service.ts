@@ -93,13 +93,25 @@ export class StreakService {
       const streakHistory = await this.getStreakHistoryForUser(user.id);
       if (streakHistory) {
         firstProblemAtTs = dateToTimestamp(streakHistory.firstProblemAt) ?? 0;
-        streak = await this.processSubmissionsAndUpdateStreak(
+        const streakIncrement = await this.processSubmissionsForStreakIncrement(
           user.id,
           submissions,
           getIANATimezone(user.timezone),
           streak,
+          dateToTimestamp(user.lastProblemSolvedAt) || 0,
+          firstProblemAtTs
         );
+        streak += streakIncrement;
       }
+    } else {
+      // Si no hay racha actual, procesar normalmente desde cero
+      streak = await this.processSubmissionsAndUpdateStreak(
+        user.id,
+        submissions,
+        getIANATimezone(user.timezone),
+        0,
+        0
+      );
     }
     const latestSubmission = submissions[0];
 
@@ -182,6 +194,7 @@ export class StreakService {
       submissions,
       timeZone,
       user.currentStreak,
+      0
     );
 
     const updatedUser = await this.prisma.user.update({
@@ -195,17 +208,109 @@ export class StreakService {
     return updatedUser;
   }
 
+  /**
+   * Verifica incrementos en la racha basándose en nuevas submissions
+   * Retorna solo el incremento/decremento, no el valor total
+   */
+  private async processSubmissionsForStreakIncrement(
+    userId: string,
+    submissions: Submission[],
+    timeZone: string,
+    currentStreakCount: number,
+    lastProblemSolvedAt: number,
+    firstProblemAtTs: number,
+  ): Promise<number> {
+    const processedDays = new Set<string>();
+    let lastProcessedTs = lastProblemSolvedAt;
+    let streakIncrement = 0;
+    let tempStreakCount = currentStreakCount;
+    let firstProblemAtTsLocal: number = firstProblemAtTs;
+    let streakWasReset = false;
+    let numProblemsSolved = 0;
+
+    // Filtrar solo submissions nuevas (posteriores a lastProblemSolvedAt)
+    const newSubmissions = submissions.filter(
+      (sub) => sub.timestamp > lastProblemSolvedAt
+    );
+
+    if (newSubmissions.length === 0) {
+      return 0; // No hay nuevas submissions
+    }
+
+    for (let i = newSubmissions.length - 1; i >= 0; i--) {
+      const submission = newSubmissions[i];
+
+      await this.submissionService.createUserSubmission(userId, submission);
+
+      const submissionDay = formatZonedDateDay(
+        convertTimestampToZonedDate(submission.timestamp, timeZone),
+        timeZone,
+      );
+
+      // Si ya procesamos este día, solo actualizamos el timestamp
+      if (processedDays.has(submissionDay)) {
+        lastProcessedTs = submission.timestamp;
+        numProblemsSolved++;
+        continue;
+      }
+
+      processedDays.add(submissionDay);
+
+      // Verificar si es el día siguiente
+      if (this.isNextDay(submission.timestamp, lastProcessedTs, timeZone)) {
+        tempStreakCount++;
+        streakIncrement++;
+        numProblemsSolved++;
+        lastProcessedTs = submission.timestamp;
+      } else if (
+        !this.isSameDay(submission.timestamp, lastProcessedTs, timeZone)
+      ) {
+        // La racha se rompió
+        streakWasReset = true;
+        tempStreakCount = 1;
+        streakIncrement = 1 - currentStreakCount; // Reseteo
+        firstProblemAtTsLocal = submission.timestamp;
+        lastProcessedTs = submission.timestamp;
+      } else {
+        // Mismo día, no incrementa
+        lastProcessedTs = submission.timestamp;
+        numProblemsSolved++;
+      }
+
+      // Actualizar streak history
+      await this.createStreakHistoryForUser({
+        userId: userId,
+        firstProblemAt: convertTimestampToTimezoneDate(
+          firstProblemAtTsLocal,
+          timeZone,
+        ),
+        problemsSolved: numProblemsSolved,
+        date: timestampToDate(lastProcessedTs),
+      });
+
+      console.log('---Streak Increment:', streakIncrement, 'New Total:', tempStreakCount);
+    }
+
+    return streakIncrement;
+  }
+
+  /**
+   * Verifica y actualiza la racha basándose en las submissions
+   * Retorna el valor total actualizado de la racha
+   */
   private async processSubmissionsAndUpdateStreak(
     userId: string,
     submissions: Submission[],
     timeZone: string,
     currentStreakCount: number,
+    lastProblemSolvedAt: number,
     firstProblemAtTs?: number,
   ): Promise<number> {
     const processedDays = new Set<string>();
-    let lastProcessedTs = submissions[submissions.length - 1]?.timestamp || 0;
+    let lastProcessedTs = lastProblemSolvedAt;
     let numProblemsSolved = 0;
     let firstProblemAtTsLocal: number = firstProblemAtTs ?? 0;
+    
 
     for (let i = submissions.length - 1; i >= 0; i--) {
       const submission = submissions[i];
@@ -249,7 +354,7 @@ export class StreakService {
             firstProblemAtTsLocal,
             timeZone,
           ),
-          problemsSolved: currentStreakCount,
+          problemsSolved: numProblemsSolved,
           date: timestampToDate(lastProcessedTs),
         });
       }
@@ -257,9 +362,7 @@ export class StreakService {
     }
 
     return currentStreakCount;
-  }
-
-  async createStreakHistoryForUser(streakHistory: StreakHistory) {
+  }  async createStreakHistoryForUser(streakHistory: StreakHistory) {
     const existingStreakDate = streakHistory.date;
 
     const exist = await this.prisma.streakHistory.findFirst({
@@ -351,6 +454,22 @@ export class StreakService {
     return subDay === nextDay;
   }
 
+  private isSameDay(
+    timestampA: number,
+    timestampB: number,
+    timezone: string,
+  ): boolean {
+    const dayA = formatZonedDateDay(
+      convertTimestampToZonedDate(timestampA, timezone),
+      timezone,
+    );
+    const dayB = formatZonedDateDay(
+      convertTimestampToZonedDate(timestampB, timezone),
+      timezone,
+    );
+    return dayA === dayB;
+  }
+
   async updateStreakBD(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -386,6 +505,7 @@ export class StreakService {
       submissions,
       getIANATimezone(user.timezone),
       0,
+      0, 
     );
 
     await this.prisma.user.update({
