@@ -12,6 +12,14 @@ export interface UserDataProfile {
   websites?: string[] | null;
 }
 
+export interface UserStreak {
+  id: string;
+  currentStreak: number;
+  lastProblemSolvedAt: Date | null;
+  longestStreak: number;
+  timezone: string | null;
+}
+
 export interface Submission {
   title: string;
   titleSlug: string;
@@ -27,10 +35,12 @@ export interface StreakHistory {
   date: Date;
 }
 
-export interface DifficultyCount {
+interface DifficultyCount {
   difficulty: 'All' | 'Easy' | 'Medium' | 'Hard' | string;
   count: number;
 }
+
+export default DifficultyCount;
 
 export interface Contributions {
   points: number;

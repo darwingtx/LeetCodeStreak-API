@@ -6,6 +6,6 @@ import { SubmissionService } from 'src/submission/submission.service';
 
 @Module({
   controllers: [StreakController],
-  providers: [StreakService,PrismaService, SubmissionService]
+  providers: [StreakService, PrismaService, SubmissionService],
 })
 export class StreakModule {}

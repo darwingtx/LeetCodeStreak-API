@@ -6,44 +6,44 @@ import { timestampToDate } from 'src/Utils/Time';
 
 @Injectable()
 export class SubmissionService {
-    apiUrl: string | undefined;
+  apiUrl: string | undefined;
 
-     constructor(
-        private configService: ConfigService,
-        private prisma: PrismaService,
-      ) {
-        this.configService = configService;
-        this.apiUrl = this.configService.get<string>('API_URL');
-        this.prisma = prisma;
-      }
+  constructor(
+    private configService: ConfigService,
+    private prisma: PrismaService,
+  ) {
+    this.configService = configService;
+    this.apiUrl = this.configService.get<string>('API_URL');
+    this.prisma = prisma;
+  }
 
-    async createUserSubmission(userId: string, submissionData: Submission) {
-        const titleSlug = submissionData.title.toLowerCase().replace(/\s+/g, '-');
-        const submittedAt = timestampToDate(submissionData.timestamp);
-        
-        const existing = await this.prisma.userSubmission.findUnique({
-            where: {
-                userId_titleSlug_submittedAt: {
-                    userId,
-                    titleSlug,
-                    submittedAt,
-                },
-            },
-        });
-        
-        if (existing) {
-            return existing; // O lanzar un error, según tu lógica
-        }
-        
-        return await this.prisma.userSubmission.create({
-            data: {
-                userId,
-                title: submissionData.title,
-                titleSlug,
-                statusDisplay: submissionData.statusDisplay,
-                submittedAt,
-                language: submissionData.lang || 'unknown',
-            },
-        });
+  async createUserSubmission(userId: string, submissionData: Submission) {
+    const titleSlug = submissionData.title.toLowerCase().replace(/\s+/g, '-');
+    const submittedAt = timestampToDate(submissionData.timestamp);
+
+    const existing = await this.prisma.userSubmission.findUnique({
+      where: {
+        userId_titleSlug_submittedAt: {
+          userId,
+          titleSlug,
+          submittedAt,
+        },
+      },
+    });
+
+    if (existing) {
+      return existing; // O lanzar un error, según tu lógica
     }
+
+    return await this.prisma.userSubmission.create({
+      data: {
+        userId,
+        title: submissionData.title,
+        titleSlug,
+        statusDisplay: submissionData.statusDisplay,
+        submittedAt,
+        language: submissionData.lang || 'unknown',
+      },
+    });
+  }
 }

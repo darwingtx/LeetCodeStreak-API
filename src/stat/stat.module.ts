@@ -4,6 +4,6 @@ import { StatController } from './stat.controller';
 
 @Module({
   providers: [StatService],
-  controllers: [StatController]
+  controllers: [StatController],
 })
 export class StatModule {}

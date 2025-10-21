@@ -1,12 +1,19 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { toZonedTime, format } from 'date-fns-tz';
+import { format, toZonedTime } from 'date-fns-tz';
 import { addDays } from 'date-fns';
-import { StreakHistory, Submission } from 'src/user/userTypes';
+import { StreakHistory, Submission, UserStreak } from 'src/user/userTypes';
 import { SubmissionService } from 'src/submission/submission.service';
 import { ConfigService } from '@nestjs/config';
-import { dateToTimestamp, timestampToDate } from 'src/Utils/Time';
-import { last } from 'rxjs';
+import {
+  convertTimestampToTimezoneDate,
+  convertTimestampToZonedDate,
+  dateToTimestamp,
+  formatZonedDateDay,
+  getIANATimezone,
+  timestampToDate,
+} from 'src/Utils/Time';
+import { Cron } from '@nestjs/schedule';
 
 @Injectable()
 export class StreakService {
@@ -21,29 +28,51 @@ export class StreakService {
     this.apiUrl = this.configService.get<string>('API_URL');
     this.prisma = prisma;
   }
-  getStreakByUserId(id: string) {
-    const streak = this.prisma.user.findUnique({
+
+  async getStreakByUserId(id: string) {
+    const streak = await this.prisma.user.findUnique({
       where: { id: id },
       select: {
         id: true,
         currentStreak: true,
       },
     });
+    // eslint-disable-next-line @typescript-eslint/no-misused-promises
     if (!streak) {
       throw new Error(`User with id ${id} not found`);
     }
     return streak;
   }
 
-  async updateStreakByUserId(id: string, timezone: string) {
+  async resetStreakByUserId(id: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: id },
+    });
 
-    let user = await this.prisma.user.findUnique({
+    if (!user) {
+      throw new Error(`User with id ${id} not found`);
+    }
+
+    const updatedUser = await this.prisma.user.update({
+      where: { id: id },
+      data: {
+        currentStreak: 0,
+        lastProblemSolvedAt: null,
+      },
+    });
+
+    return updatedUser;
+  }
+
+  async updateStreakByUserId(id: string, timezone: string) {
+    const user = await this.prisma.user.findUnique({
       where: { id: id },
       select: {
         id: true,
         username: true,
         lastProblemSolvedAt: true,
         currentStreak: true,
+        timezone: true,
       },
     });
 
@@ -53,112 +82,94 @@ export class StreakService {
 
     let streak = user.currentStreak;
 
-    // Get latest AC submissions
-    const data = await this.queryACSubmissions(user.username!, 1);
-    console.log('AC Submissions Data:', data.data);
-    
+    const data = await this.queryACSubmissions(user.username, 5);
+
     const submissions: Submission[] = data.data.recentAcSubmissionList;
     let firstProblemAtTs: number = 0;
     if (submissions.length === 0) {
       return user; // No new submissions
     }
-
-    const latestSubmission = submissions[0];
-    if (streak === 0) {
-      firstProblemAtTs = latestSubmission.timestamp;
-    } else {
-      const latest = await this.getLatestFirstProblemAtForUser(id);
-      firstProblemAtTs = latest?.firstProblemAt
-        ? dateToTimestamp(latest.firstProblemAt)!
-        : 0;
-    }
-    const lastSolvedTs = dateToTimestamp(user.lastProblemSolvedAt) || 0;
-    console.log('Latest Submission Timestamp:', latestSubmission.timestamp);
-    console.log('Last Solved Timestamp:', lastSolvedTs);
-    console.log('First Problem At Timestamp:', firstProblemAtTs);
-    // Check if we already processed this problem today
-    if (this.isSameDay(latestSubmission.timestamp, Date.now() / 1000, timezone)) {
-      // Check if it's exactly the same problem we already saved
-      if (lastSolvedTs === latestSubmission.timestamp) {
-        return user;
-      } else {
-        // Different problem solved today, save and update lastProblemSolvedAt
-        await this.submissionService.createUserSubmission(
-          user.id!,
-          latestSubmission,
+    if (streak > 0) {
+      const streakHistory = await this.getStreakHistoryForUser(user.id);
+      if (streakHistory) {
+        firstProblemAtTs = dateToTimestamp(streakHistory.firstProblemAt) ?? 0;
+        const streakIncrement = await this.processSubmissionsForStreakIncrement(
+          user.id,
+          submissions,
+          getIANATimezone(user.timezone),
+          streak,
+          dateToTimestamp(user.lastProblemSolvedAt) || 0,
+          firstProblemAtTs
         );
-
-        const updatedUser = await this.prisma.user.update({
-          where: { id: id },
-          data: {
-            currentStreak: user.currentStreak + 1,
-            lastProblemSolvedAt: timestampToDate(latestSubmission.timestamp),
-          },
-        });
-
-        return updatedUser;
+        streak += streakIncrement;
       }
-    }
-
-    // Save the new submission
-    await this.submissionService.createUserSubmission(
-      user.id!,
-      latestSubmission,
-    );
-
-    let newStreak = user.currentStreak;
-    let shouldUpdateHistory = false;
-
-    if (lastSolvedTs === 0) {
-      // First submission ever
-      newStreak = 1;
-      shouldUpdateHistory = true;
-    } else if (
-      this.isSameDay(latestSubmission.timestamp, lastSolvedTs, timezone)
-    ) {
-      // Same day, keep streak (submission already saved)
-      return user;
-    } else if (
-      this.isPreviousDay(latestSubmission.timestamp, lastSolvedTs, timezone)
-    ) {
-      // Consecutive day, increment streak
-      newStreak = user.currentStreak + 1;
-      shouldUpdateHistory = true;
     } else {
-      // Streak break, streak = 1
-      newStreak = 1;
-      shouldUpdateHistory = true;
+      // Si no hay racha actual, procesar normalmente desde cero
+      streak = await this.processSubmissionsAndUpdateStreak(
+        user.id,
+        submissions,
+        getIANATimezone(user.timezone),
+        0,
+        0
+      );
     }
-
-    // SAVE streak history if needed
-    if (shouldUpdateHistory) {
-      await this.createStreakHistoryForUser({
-        userId: id,
-        firstProblemAt: this.convertTimestampToTimezoneDate(
-          latestSubmission.timestamp,
-          timezone,
-        ),
-        problemsSolved: newStreak,
-        date: new Date(),
-      });
-    }
+    const latestSubmission = submissions[0];
 
     // Update user with new streak
     const updatedUser = await this.prisma.user.update({
       where: { id: id },
       data: {
-        currentStreak: newStreak,
-        lastProblemSolvedAt: this.timestampToDate(latestSubmission.timestamp),
+        currentStreak: streak,
+        lastProblemSolvedAt: timestampToDate(latestSubmission.timestamp),
       },
     });
 
     return updatedUser;
   }
 
-  updateStreaksForAllUsers() {}
+  async getStreakHistoryForUser(id: string) {
+    return this.prisma.streakHistory.findFirst({
+      where: { userId: id },
+      orderBy: { date: 'desc' },
+    });
+  }
+
+  @Cron('0 */3 * * *')
+  async updateStreaksForAllUsers() {
+    const users = await this.prisma.user.findMany({
+      select: {
+        id: true,
+        timezone: true,
+        lastProblemSolvedAt: true,
+        longestStreak: true,
+        currentStreak: true,
+      },
+    });
+    if (users.length === 0) {
+      throw new Error('No users found');
+    }
+    const userStreaks: UserStreak[] = users.map((user) => ({
+      id: user.id,
+      currentStreak: user.currentStreak,
+      lastProblemSolvedAt: user.lastProblemSolvedAt,
+      longestStreak: user.longestStreak,
+      timezone: user.timezone,
+    }));
+
+    for (const user of userStreaks) {
+      this.updateStreakByUserId(user.id, getIANATimezone(user.timezone));
+    }
+
+    return 'Streaks updated for all users';
+  }
+
+  @Cron('59 23 * * *')
+  async updateStreaksForAllUsersAtEndOfDay() {
+    await this.updateStreaksForAllUsers();
+  }
 
   async updateAllStreakUser(id: string, timeZone: string) {
-    let user = await this.prisma.user.findUnique({
+    const user = await this.prisma.user.findUnique({
       where: { id: id },
       select: {
         id: true,
@@ -171,26 +182,143 @@ export class StreakService {
       throw new Error(`User with id ${id} not found`);
     }
 
-    const data = await this.queryACSubmissions(user.username!, 30);
+    const data = await this.queryACSubmissions(user.username, 30);
     const submissions: Submission[] = data.data.recentAcSubmissionList;
 
     if (submissions.length === 0) {
       return user;
     }
 
+    const currentStreakCount = await this.processSubmissionsAndUpdateStreak(
+      id,
+      submissions,
+      timeZone,
+      user.currentStreak,
+      0
+    );
+
+    const updatedUser = await this.prisma.user.update({
+      where: { id: id },
+      data: {
+        currentStreak: currentStreakCount,
+        lastProblemSolvedAt: timestampToDate(submissions[0].timestamp),
+      },
+    });
+
+    return updatedUser;
+  }
+
+  /**
+   * Verifica incrementos en la racha basándose en nuevas submissions
+   * Retorna solo el incremento/decremento, no el valor total
+   */
+  private async processSubmissionsForStreakIncrement(
+    userId: string,
+    submissions: Submission[],
+    timeZone: string,
+    currentStreakCount: number,
+    lastProblemSolvedAt: number,
+    firstProblemAtTs: number,
+  ): Promise<number> {
     const processedDays = new Set<string>();
-    let currentStreakCount = 0;
-    let lastProcessedTs = submissions[submissions.length - 1]?.timestamp || 0;
-    let firstProblemAtTs = 0;
+    let lastProcessedTs = lastProblemSolvedAt;
+    let streakIncrement = 0;
+    let tempStreakCount = currentStreakCount;
+    let firstProblemAtTsLocal: number = firstProblemAtTs;
+    let streakWasReset = false;
     let numProblemsSolved = 0;
+
+    // Filtrar solo submissions nuevas (posteriores a lastProblemSolvedAt)
+    const newSubmissions = submissions.filter(
+      (sub) => sub.timestamp > lastProblemSolvedAt
+    );
+
+    if (newSubmissions.length === 0) {
+      return 0; // No hay nuevas submissions
+    }
+
+    for (let i = newSubmissions.length - 1; i >= 0; i--) {
+      const submission = newSubmissions[i];
+
+      await this.submissionService.createUserSubmission(userId, submission);
+
+      const submissionDay = formatZonedDateDay(
+        convertTimestampToZonedDate(submission.timestamp, timeZone),
+        timeZone,
+      );
+
+      // Si ya procesamos este día, solo actualizamos el timestamp
+      if (processedDays.has(submissionDay)) {
+        lastProcessedTs = submission.timestamp;
+        numProblemsSolved++;
+        continue;
+      }
+
+      processedDays.add(submissionDay);
+
+      // Verificar si es el día siguiente
+      if (this.isNextDay(submission.timestamp, lastProcessedTs, timeZone)) {
+        tempStreakCount++;
+        streakIncrement++;
+        numProblemsSolved++;
+        lastProcessedTs = submission.timestamp;
+      } else if (
+        !this.isSameDay(submission.timestamp, lastProcessedTs, timeZone)
+      ) {
+        // La racha se rompió
+        streakWasReset = true;
+        tempStreakCount = 1;
+        streakIncrement = 1 - currentStreakCount; // Reseteo
+        firstProblemAtTsLocal = submission.timestamp;
+        lastProcessedTs = submission.timestamp;
+      } else {
+        // Mismo día, no incrementa
+        lastProcessedTs = submission.timestamp;
+        numProblemsSolved++;
+      }
+
+      // Actualizar streak history
+      await this.createStreakHistoryForUser({
+        userId: userId,
+        firstProblemAt: convertTimestampToTimezoneDate(
+          firstProblemAtTsLocal,
+          timeZone,
+        ),
+        problemsSolved: numProblemsSolved,
+        date: timestampToDate(lastProcessedTs),
+      });
+
+      console.log('---Streak Increment:', streakIncrement, 'New Total:', tempStreakCount);
+    }
+
+    return streakIncrement;
+  }
+
+  /**
+   * Verifica y actualiza la racha basándose en las submissions
+   * Retorna el valor total actualizado de la racha
+   */
+  private async processSubmissionsAndUpdateStreak(
+    userId: string,
+    submissions: Submission[],
+    timeZone: string,
+    currentStreakCount: number,
+    lastProblemSolvedAt: number,
+    firstProblemAtTs?: number,
+  ): Promise<number> {
+    const processedDays = new Set<string>();
+    let lastProcessedTs = lastProblemSolvedAt;
+    let numProblemsSolved = 0;
+    let firstProblemAtTsLocal: number = firstProblemAtTs ?? 0;
+    
 
     for (let i = submissions.length - 1; i >= 0; i--) {
       const submission = submissions[i];
 
-      await this.submissionService.createUserSubmission(user.id!, submission);
+      await this.submissionService.createUserSubmission(userId, submission);
 
-      const submissionDay = this.formatZonedDateDay(
-        this.convertTimestampToZonedDate(submission.timestamp, timeZone),
+      const submissionDay = formatZonedDateDay(
+        convertTimestampToZonedDate(submission.timestamp, timeZone),
         timeZone,
       );
 
@@ -206,7 +334,7 @@ export class StreakService {
         numProblemsSolved++;
         currentStreakCount = 1;
         lastProcessedTs = submission.timestamp;
-        firstProblemAtTs = submission.timestamp;
+        firstProblemAtTsLocal = submission.timestamp;
       } else if (
         this.isNextDay(submission.timestamp, lastProcessedTs, timeZone)
       ) {
@@ -216,36 +344,25 @@ export class StreakService {
       } else {
         currentStreakCount = 1;
         numProblemsSolved = 1;
-        firstProblemAtTs = submission.timestamp;
+        firstProblemAtTsLocal = submission.timestamp;
         lastProcessedTs = submission.timestamp;
       }
       if (currentStreakCount > 0) {
-      await this.createStreakHistoryForUser({
-        userId: id,
-        firstProblemAt: this.convertTimestampToTimezoneDate(
-          firstProblemAtTs,
-          timeZone,
-        ),
-        problemsSolved: currentStreakCount,
-        date: timestampToDate(lastProcessedTs),
-      });
-    }
+        await this.createStreakHistoryForUser({
+          userId: userId,
+          firstProblemAt: convertTimestampToTimezoneDate(
+            firstProblemAtTsLocal,
+            timeZone,
+          ),
+          problemsSolved: numProblemsSolved,
+          date: timestampToDate(lastProcessedTs),
+        });
+      }
       console.log('---Current Streak Count:', currentStreakCount);
     }
 
-
-    const updatedUser = await this.prisma.user.update({
-      where: { id: id },
-      data: {
-        currentStreak: currentStreakCount,
-        lastProblemSolvedAt: this.timestampToDate(submissions[0].timestamp),
-      },
-    });
-
-    return updatedUser;
-  }
-
-  async createStreakHistoryForUser(streakHistory: StreakHistory) {
+    return currentStreakCount;
+  }  async createStreakHistoryForUser(streakHistory: StreakHistory) {
     const existingStreakDate = streakHistory.date;
 
     const exist = await this.prisma.streakHistory.findFirst({
@@ -287,70 +404,6 @@ export class StreakService {
     });
   }
 
-  resetStreakByUserId(id: string) {
-    return `This action resets the streak for user with id: ${id}`;
-  }
-
-  private convertTimestampToTimezoneDate(
-    timestampInSeconds: number,
-    timezone: string,
-  ): string {
-    const date = new Date(timestampInSeconds * 1000);
-    const zonedDate = toZonedTime(date, timezone);
-    return format(zonedDate, 'yyyy-MM-dd HH:mm:ssXXX', { timeZone: timezone });
-  }
-
-  private convertTimestampToZonedDate(
-    timestampInSeconds: number,
-    timezone: string,
-  ): Date {
-    const date = new Date(timestampInSeconds * 1000);
-    console.log('Timezone:', timezone);
-
-    const zonedDate = toZonedTime(date, timezone);
-    console.log(
-      'Formatted in timezone:',
-      format(zonedDate, 'yyyy-MM-dd HH:mm:ss zzz', { timeZone: timezone }),
-    );
-
-    return zonedDate;
-  }
-
-  private formatZonedDateDay(date: Date, timezone: string): string {
-    return format(date, 'yyyy-MM-dd', { timeZone: timezone });
-  }
-
-  private isSameDay(tsA: number, tsB: number, timezone: string): boolean {
-    const a = this.convertTimestampToZonedDate(tsA, timezone);
-    const b = this.convertTimestampToZonedDate(tsB, timezone);
-    return (
-      this.formatZonedDateDay(a, timezone) ===
-      this.formatZonedDateDay(b, timezone)
-    );
-  }
-
-  private isPreviousDay(
-    submissionTs: number,
-    lastSolvedTs: number,
-    timezone: string,
-  ): boolean {
-    const subDay = this.formatZonedDateDay(
-      this.convertTimestampToZonedDate(submissionTs, timezone),
-      timezone,
-    );
-    console.log('Submission Day:', subDay);
-    const prevDay = this.formatZonedDateDay(
-      addDays(this.convertTimestampToZonedDate(lastSolvedTs, timezone), -1),
-      timezone,
-    );
-    console.log('Previous Day:', prevDay);
-    return subDay === prevDay;
-  }
-
-  private timestampToDate(timestamp: number): Date {
-    return new Date(timestamp * 1000);
-  }
-
   private async queryACSubmissions(username: string, limit: number) {
     const query = `#graphql
     query getACSubmissions ($username: String!, $limit: Int) {
@@ -390,14 +443,84 @@ export class StreakService {
     lastSolvedTs: number,
     timezone: string,
   ): boolean {
-    const subDay = this.formatZonedDateDay(
-      this.convertTimestampToZonedDate(submissionTs, timezone),
+    const subDay = formatZonedDateDay(
+      convertTimestampToZonedDate(submissionTs, timezone),
       timezone,
     );
-    const nextDay = this.formatZonedDateDay(
-      addDays(this.convertTimestampToZonedDate(lastSolvedTs, timezone), 1), // +1 en lugar de -1
+    const nextDay = formatZonedDateDay(
+      addDays(convertTimestampToZonedDate(lastSolvedTs, timezone), 1),
       timezone,
     );
     return subDay === nextDay;
+  }
+
+  private isSameDay(
+    timestampA: number,
+    timestampB: number,
+    timezone: string,
+  ): boolean {
+    const dayA = formatZonedDateDay(
+      convertTimestampToZonedDate(timestampA, timezone),
+      timezone,
+    );
+    const dayB = formatZonedDateDay(
+      convertTimestampToZonedDate(timestampB, timezone),
+      timezone,
+    );
+    return dayA === dayB;
+  }
+
+  async updateStreakBD(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        username: true,
+        lastProblemSolvedAt: true,
+        currentStreak: true,
+        timezone: true,
+      },
+    });
+
+    if (!user) {
+      throw new Error(`User with id ${userId} not found`);
+    }
+
+    const userSubmissions = await this.prisma.userSubmission.findMany({
+      where: { userId: userId },
+      orderBy: { submittedAt: 'desc' },
+    });
+
+    
+    const submissions: Submission[] = userSubmissions.map((sub) => ({
+      title: sub.title,
+      titleSlug: sub.titleSlug,
+      timestamp: dateToTimestamp(sub.submittedAt) ?? 0,
+      statusDisplay: sub.statusDisplay,
+      lang: sub.language,
+    }));
+
+    const streak = await this.processSubmissionsAndUpdateStreak(
+      user.id,
+      submissions,
+      getIANATimezone(user.timezone),
+      0,
+      0, 
+    );
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        currentStreak: streak,
+        lastProblemSolvedAt:
+          submissions.length > 0
+            ? timestampToDate(submissions[0].timestamp)
+            : user.lastProblemSolvedAt,
+      },
+    });
+
+    
+
+    return streak;
   }
 }
