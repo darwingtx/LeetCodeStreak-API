@@ -31,4 +31,9 @@ export class StreakController {
   updateStreakBD(@Param('id') id: string) {
     return this.streakService.updateStreakBD(id);
   }
+
+  @Post('updateallusers')
+  updateStreakAllUsers() {
+    return this.streakService.updateStreaksForAllUsers(); 
+  }
 }

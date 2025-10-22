@@ -224,10 +224,6 @@ We welcome contributions from the community! This is an open-source project and 
 
 ---
 
-## 📄 License
-
-This project is open source and available under the [MIT License](LICENSE).
-
 ---
 
 ## 👥 Community
