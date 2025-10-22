@@ -219,7 +219,6 @@ We welcome contributions from the community! This is an open-source project and 
 - [ ] Create scheduled tasks for automatic syncs
 - [ ] Build notification system for streak reminders
 - [ ] Develop frontend application
-- [ ] Add support for more platforms (CodeForces, HackerRank, etc.)
 - [ ] Implement achievement/badge system
 
 ---
