@@ -1,98 +1,259 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# 🔥 LeetCode Streak API
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+A REST API service designed to track and manage LeetCode streaks with timezone awareness and group collaboration features. This project solves the problem of LeetCode's official streak system not accounting for user timezones, which often causes users to lose their streaks unfairly.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## 📖 Overview
 
-## Description
+**LeetCode Streak API** is an open-source backend service that stores LeetCode user data and maintains a comprehensive history of:
+- Daily solving streaks (with timezone support)
+- Solved problems history
+- User statistics and profiles
+- Group challenges with friends
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+The API fetches official user data directly from LeetCode's GraphQL API and provides enhanced features that the official platform doesn't offer.
 
-## Project setup
+### Why This Project?
 
+1. **Timezone Problem**: LeetCode's official streak system doesn't consider user timezones, making it easy to lose streaks even when solving problems daily in your local time.
+2. **Group Streaks**: Connect with friends and maintain group streaks together, creating a collaborative competitive environment.
+3. **Historical Data**: Keep a permanent record of your solving history and streak progress.
+
+---
+
+## 🚀 Features
+
+- ✅ User authentication via LeetCode username
+- ✅ Automatic sync with LeetCode's official API
+- ✅ Timezone-aware streak tracking
+- ✅ Historical streak data
+- ✅ Individual and group statistics
+- ✅ Problem submission tracking
+- ✅ Group creation and management
+- ✅ RESTful API architecture
+
+---
+
+## 🛠️ Tech Stack
+
+- **Framework**: [NestJS](https://nestjs.com/) (Node.js)
+- **Language**: TypeScript
+- **Database**: PostgreSQL
+- **ORM**: Prisma
+- **Authentication**: JWT
+- **Package Manager**: pnpm
+- **Date Handling**: date-fns, date-fns-tz
+- **Validation**: class-validator, class-transformer
+
+---
+
+## 📦 Installation
+
+### Prerequisites
+
+- Node.js (v18 or higher)
+- PostgreSQL database
+- pnpm (recommended) or npm
+
+### Setup
+
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/darwingtx/LeetCodeStreak-Backend.git
+   cd leetcode-streak-backend
+   ```
+
+2. **Install dependencies**
+   ```bash
+   pnpm install
+   ```
+
+3. **Configure environment variables**
+   
+   Create a `.env` file in the root directory:
+   ```env
+   DATABASE_URL="postgresql://user:password@localhost:5432/leetcode_streak"
+   JWT_SECRET="your-secret-key"
+   PORT=3000
+   ```
+
+4. **Run database migrations**
+   ```bash
+   pnpm prisma migrate dev
+   ```
+
+5. **Generate Prisma Client**
+   ```bash
+   pnpm prisma generate
+   ```
+
+---
+
+## 🏃 Running the Application
+
+### Development Mode
 ```bash
-$ pnpm install
+pnpm run start:dev
 ```
 
-## Compile and run the project
-
+### Production Mode
 ```bash
-# development
-$ pnpm run start
-
-# watch mode
-$ pnpm run start:dev
-
-# production mode
-$ pnpm run start:prod
+pnpm run build
+pnpm run start:prod
 ```
 
-## Run tests
-
+### Debug Mode
 ```bash
-# unit tests
-$ pnpm run test
-
-# e2e tests
-$ pnpm run test:e2e
-
-# test coverage
-$ pnpm run test:cov
+pnpm run start:debug
 ```
 
-## Deployment
+The API will be available at `http://localhost:3000`
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+---
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+## 📡 API Endpoints
+
+### Authentication
+- `GET /auth/login/:username` - Login/Register with LeetCode username
+
+### User Management
+- `GET /user/profile/:id` - Get user profile by username
+- `PATCH /user/update/:username` - Update user timezone
+  ```json
+  {
+    "timezone": "America/New_York"
+  }
+  ```
+
+### Streak Management
+- `GET /streak/:id` - Get user streak data
+- `PATCH /streak/update/:id` - Update streak (with timezone)
+  ```json
+  {
+    "timezone": "America/New_York"
+  }
+  ```
+- `POST /streak/:id/reset` - Reset user streak
+- `PATCH /streak/updateall/:id` - Update all streak data for user
+- `POST /streak/updatebd/:id` - Sync streak data from database
+
+### Groups
+- `[To be implemented]` - Group creation and management endpoints are in development
+
+### Submissions
+- `[To be implemented]` - Submission tracking endpoints are in development
+
+### Statistics
+- `[To be implemented]` - Statistics endpoints are in development
+
+---
+
+## 🗃️ Database Schema
+
+The application uses Prisma ORM with the following main models:
+
+- **User**: LeetCode user profiles and statistics
+- **UserSubmission**: Individual problem submissions
+- **StreakHistory**: Daily streak records
+- **Group**: Study/challenge groups
+- **UserGroup**: Group membership
+- **GroupStreakHistory**: Group streak tracking
+- **SyncLog**: API sync logs
+
+For detailed schema, check `/prisma/schema.prisma`
+
+---
+
+## 🧪 Testing
 
 ```bash
-$ pnpm install -g @nestjs/mau
-$ mau deploy
+# Unit tests
+pnpm run test
+
+# E2E tests
+pnpm run test:e2e
+
+# Test coverage
+pnpm run test:cov
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+---
 
-## Resources
+## 🤝 Contributing
 
-Check out a few resources that may come in handy when working with NestJS:
+We welcome contributions from the community! This is an open-source project and we'd love your help to make it better.
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+### How to Contribute
 
-## Support
+1. **Fork the repository**
+2. **Create a feature branch**
+   ```bash
+   git checkout -b feature/amazing-feature
+   ```
+3. **Commit your changes**
+   ```bash
+   git commit -m 'Add some amazing feature'
+   ```
+4. **Push to the branch**
+   ```bash
+   git push origin feature/amazing-feature
+   ```
+5. **Open a Pull Request**
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+### Contribution Ideas
 
-## Stay in touch
+- 🐛 Bug fixes
+- ✨ New features (submissions tracking, statistics, etc.)
+- 📝 Documentation improvements
+- 🎨 UI/Frontend development
+- 🧪 Test coverage
+- 🌐 Internationalization
+- ⚡ Performance optimizations
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+---
 
-## License
+## 📋 Roadmap
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+- [ ] Complete group management functionality
+- [ ] Implement submission tracking endpoints
+- [ ] Add statistics and analytics endpoints
+- [ ] Create scheduled tasks for automatic syncs
+- [ ] Build notification system for streak reminders
+- [ ] Develop frontend application
+- [ ] Add support for more platforms (CodeForces, HackerRank, etc.)
+- [ ] Implement achievement/badge system
+
+---
+
+## 📄 License
+
+This project is open source and available under the [MIT License](LICENSE).
+
+---
+
+## 👥 Community
+
+- **Report bugs**: [GitHub Issues](https://github.com/darwingtx/LeetCodeStreak-Backend/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/darwingtx/LeetCodeStreak-Backend/discussions)
+
+---
+
+## 🙏 Acknowledgments
+
+- Built with [NestJS](https://nestjs.com/)
+- Data sourced from [LeetCode](https://leetcode.com/)
+- Inspired by the need for better streak tracking
+
+---
+
+## 👤 Author
+
+**Darwin Castaño**
+- GitHub: [@darwingtx](https://github.com/darwingtx)
+
+---
+
+**Made with ❤️ by developers, for developers**
+
+*Keep your streak alive, no matter your timezone!* 🌍⏰
+
+[![Powered by DartNode](https://dartnode.com/branding/DN-Open-Source-sm.png)](https://dartnode.com "Powered by DartNode - Free VPS for Open Source")
