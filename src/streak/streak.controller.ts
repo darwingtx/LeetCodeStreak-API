@@ -32,7 +32,7 @@ export class StreakController {
     return this.streakService.updateStreakBD(id);
   }
 
-  @Post('updateallusers')
+  @Patch('updateallusers')
   updateStreakAllUsers() {
     return this.streakService.updateStreaksForAllUsers(); 
   }
