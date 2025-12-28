@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
-import { StreakService } from './streak.service';
+import StreakService from './streak.service';
 
 @Controller('streak')
 export class StreakController {
@@ -14,7 +14,7 @@ export class StreakController {
 
   @Patch('update/:id')
   updateStreak(@Param('id') id: string, @Body() body: { timezone: string }) {
-    return this.streakService.updateStreakByUserId(id, body.timezone);
+    return this.streakService.updateStreakByUserId(id);
   }
 
   @Post('/:id/reset')
@@ -34,6 +34,6 @@ export class StreakController {
 
   @Patch('updateallusers')
   updateStreakAllUsers() {
-    return this.streakService.updateStreaksForAllUsers(); 
+    return this.streakService.updateStreaksForAllUsers();
   }
 }
