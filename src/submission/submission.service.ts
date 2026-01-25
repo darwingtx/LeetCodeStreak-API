@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { Submission } from 'src/user/userTypes';
@@ -6,6 +6,7 @@ import { timestampToDate } from 'src/Utils/Time';
 
 @Injectable()
 export class SubmissionService {
+  private readonly logger = new Logger(SubmissionService.name);
   apiUrl: string | undefined;
 
   constructor(
@@ -32,7 +33,10 @@ export class SubmissionService {
     });
 
     if (existing) {
-      return existing; // O lanzar un error, según tu lógica
+      this.logger.debug(
+        `Submission ${titleSlug} for user ${userId} already exists`,
+      );
+      return existing;
     }
 
     return await this.prisma.userSubmission.create({

@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { StreakController } from './streak.controller';
-import StreakService from './streak.service';
+import { StreakService } from './streak.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { SubmissionService } from 'src/submission/submission.service';
 
