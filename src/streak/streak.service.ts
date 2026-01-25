@@ -1,4 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  InternalServerErrorException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { addDays } from 'date-fns';
 import { StreakHistory, Submission, UserStreak } from 'src/user/userTypes';
@@ -15,7 +21,8 @@ import {
 import { Cron } from '@nestjs/schedule';
 
 @Injectable()
-class StreakService {
+export class StreakService {
+  private readonly logger = new Logger(StreakService.name);
   apiUrl: string | undefined;
 
   constructor(
@@ -38,7 +45,7 @@ class StreakService {
     });
     // eslint-disable-next-line @typescript-eslint/no-misused-promises
     if (!streak) {
-      throw new Error(`User with id ${id} not found`);
+      throw new NotFoundException(`User with id ${id} not found`);
     }
     return streak;
   }
@@ -49,7 +56,7 @@ class StreakService {
     });
 
     if (!user) {
-      throw new Error(`User with id ${id} not found`);
+      throw new NotFoundException(`User with id ${id} not found`);
     }
 
     return await this.prisma.user.update({
@@ -74,11 +81,12 @@ class StreakService {
     });
 
     if (!user) {
-      throw new Error(`User with id ${id} not found`);
+      throw new NotFoundException(`User with id ${id} not found`);
     }
 
     let streak = user.currentStreak;
 
+    // Choose last 5 submissions leetcode exercises
     const data = await this.queryACSubmissions(user.username, 5);
 
     const submissions: Submission[] = data.data.recentAcSubmissionList;
@@ -140,7 +148,8 @@ class StreakService {
       },
     });
     if (users.length === 0) {
-      throw new Error('No users found');
+      this.logger.warn('No users found to update');
+      return 'No users found';
     }
     const userStreaks: UserStreak[] = users.map((user) => ({
       id: user.id,
@@ -173,7 +182,7 @@ class StreakService {
       },
     });
     if (!user) {
-      throw new Error(`User with id ${id} not found`);
+      throw new NotFoundException(`User with id ${id} not found`);
     }
 
     const data = await this.queryACSubmissions(user.username, 30);
@@ -224,7 +233,7 @@ class StreakService {
       data: {
         userId: streakHistory.userId,
         firstProblemAt: streakHistory.firstProblemAt,
-        problemsSolved: streakHistory.problemsSolved,
+        problemsSolved: streakHistory.problemsSolved+1,
         date: existingStreakDate,
       },
     });
@@ -243,7 +252,7 @@ class StreakService {
     });
 
     if (!user) {
-      throw new Error(`User with id ${userId} not found`);
+      throw new NotFoundException(`User with id ${userId} not found`);
     }
 
     const userSubmissions = await this.prisma.userSubmission.findMany({
@@ -298,7 +307,7 @@ class StreakService {
     let streakIncrement = 0;
     let tempStreakCount = currentStreakCount;
     let firstProblemAtTsLocal: number = firstProblemAtTs;
-    let streakWasReset = false;
+    let streakWasReset: boolean = false;
     let numProblemsSolved = 0;
 
     // Filtrar solo submissions nuevas (posteriores a lastProblemSolvedAt)
@@ -361,11 +370,8 @@ class StreakService {
         date: timestampToDate(lastProcessedTs),
       });
 
-      console.log(
-        '---Streak Increment:',
-        streakIncrement,
-        'New Total:',
-        tempStreakCount,
+      this.logger.debug(
+        `Streak Increment: ${streakIncrement}, New Total: ${tempStreakCount}`,
       );
     }
 
@@ -435,7 +441,7 @@ class StreakService {
           date: timestampToDate(lastProcessedTs),
         });
       }
-      console.log('---Current Streak Count:', currentStreakCount);
+      this.logger.debug(`Current Streak Count: ${currentStreakCount}`);
     }
 
     return currentStreakCount;
@@ -459,7 +465,7 @@ class StreakService {
     });
 
     if (!this.apiUrl) {
-      throw new Error('API_URL is not defined');
+      throw new InternalServerErrorException('API_URL is not defined');
     }
 
     const res = await fetch(this.apiUrl, {
@@ -469,7 +475,9 @@ class StreakService {
     });
 
     if (!res.ok) {
-      throw new Error(`Error en la request: ${res.statusText}`);
+      throw new InternalServerErrorException(
+        `Error in request: ${res.statusText}`,
+      );
     }
 
     return await res.json();
@@ -508,4 +516,4 @@ class StreakService {
   }
 }
 
-export default StreakService;
+

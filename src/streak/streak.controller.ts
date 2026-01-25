@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
-import StreakService from './streak.service';
+// @ts-ignore
+import { StreakService } from './streak.service';
 
 @Controller('streak')
 export class StreakController {

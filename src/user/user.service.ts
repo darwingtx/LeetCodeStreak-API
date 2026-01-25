@@ -1,4 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  InternalServerErrorException,
+  BadRequestException,
+} from '@nestjs/common';
 import { MatchedUser } from './userTypes';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
@@ -6,6 +12,7 @@ import { getUTCOffset } from '../Utils/Time';
 
 @Injectable()
 export class UserService {
+  private readonly logger = new Logger(UserService.name);
   apiUrl: string | undefined;
 
   constructor(
@@ -24,7 +31,9 @@ export class UserService {
 
   async getProfileByUsername(username: string): Promise<MatchedUser> {
     if (!this.apiUrl) {
-      throw new Error('API_URL environment variable is not defined');
+      throw new InternalServerErrorException(
+        'API_URL environment variable is not defined',
+      );
     }
     const query = `#graphql
     query getUserProfile($username: String!) {
@@ -92,14 +101,16 @@ export class UserService {
     });
 
     if (!res.ok) {
-      throw new Error(`Error en la request: ${res.statusText}`);
+      throw new InternalServerErrorException(
+        `Error in request: ${res.statusText}`,
+      );
     }
 
     const data = await res.json();
     const matchedUser = data?.data?.matchedUser;
     if (!matchedUser) {
-      throw new Error(
-        `No se encontró el usuario ${username} en la API externa`,
+      throw new NotFoundException(
+        `User ${username} not found in external API`,
       );
     }
     return matchedUser;
@@ -107,7 +118,9 @@ export class UserService {
 
   async createUser(username: string) {
     if (!this.apiUrl) {
-      throw new Error('API_URL environment variable is not defined');
+      throw new InternalServerErrorException(
+        'API_URL environment variable is not defined',
+      );
     }
 
     const query = `
@@ -164,14 +177,16 @@ export class UserService {
     });
 
     if (!res.ok) {
-      throw new Error(`Error en la request: ${res.statusText}`);
+      throw new InternalServerErrorException(
+        `Error in request: ${res.statusText}`,
+      );
     }
 
     const { data } = await res.json();
     const matchedUser = data?.matchedUser;
     if (!matchedUser) {
-      throw new Error(
-        `No se encontró el usuario ${username} en la API externa`,
+      throw new NotFoundException(
+        `User ${username} not found in external API`,
       );
     }
 
@@ -203,7 +218,7 @@ export class UserService {
   }
 
   async updateUserProfile(username: string, timeZone: string) {
-    console.log('Updating user profile for:', username);
+    this.logger.log(`Updating user profile for: ${username}`);
     const profile = await this.getProfileByUsername(username);
 
     const data = {
@@ -241,7 +256,7 @@ export class UserService {
       return upserted;
     } catch (err) {
       if (err && err.code === 'P2025') {
-        throw new Error(
+        throw new NotFoundException(
           `Prisma P2025: failed to update or create user with username=${username}. Original message: ${err.message}`,
         );
       }

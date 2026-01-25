@@ -1,4 +1,7 @@
 import { format, formatInTimeZone, toZonedTime } from 'date-fns-tz';
+import { Logger } from '@nestjs/common';
+
+const logger = new Logger('TimeUtils');
 
 export function timestampToDate(timestamp: number): Date {
   return new Date(timestamp * 1000);
@@ -13,10 +16,9 @@ export function getUTCOffset(timezone: string): string {
     const now = new Date();
     // Use formatInTimeZone from date-fns-tz to get the offset
     const offset = formatInTimeZone(now, timezone, 'XXX');
-    console.log(`Calculated offset for timezone ${timezone}: ${offset}`);
     return `UTC${offset}`;
   } catch (error) {
-    console.error(`Invalid timezone: ${timezone}`, error);
+    logger.error(`Invalid timezone: ${timezone}`, error);
     return 'UTC+00:00';
   }
 }
@@ -25,7 +27,7 @@ export function getIANATimezone(utcOffset: string | null): string {
   try {
     // Si viene null o vacío, devolvemos UTC
     if (!utcOffset) {
-      console.warn('utcOffset is null or empty, defaulting to UTC');
+      logger.warn('utcOffset is null or empty, defaulting to UTC');
       return 'UTC';
     }
 
@@ -67,14 +69,12 @@ export function getIANATimezone(utcOffset: string | null): string {
     const ianaTimezone = UTC_TO_IANA[normalized];
 
     if (ianaTimezone) {
-      console.log(`Converted ${utcOffset} to ${ianaTimezone}`);
       return ianaTimezone;
     }
-
-    console.warn(`Unknown UTC offset: ${utcOffset}, defaulting to UTC`);
+    logger.warn(`Unknown UTC offset: ${utcOffset}, defaulting to UTC`);
     return 'UTC';
   } catch (error) {
-    console.error(`Error converting UTC offset: ${utcOffset}`, error);
+    logger.error(`Error converting UTC offset: ${utcOffset}`, error);
     return 'UTC';
   }
 }
@@ -93,15 +93,8 @@ export function convertTimestampToZonedDate(
   timezone: string,
 ): Date {
   const date = new Date(timestampInSeconds * 1000);
-  console.log('Timezone:', timezone);
 
-  const zonedDate = toZonedTime(date, timezone);
-  console.log(
-    'Formatted in timezone:',
-    format(zonedDate, 'yyyy-MM-dd HH:mm:ss zzz', { timeZone: timezone }),
-  );
-
-  return zonedDate;
+  return toZonedTime(date, timezone);
 }
 
 export function formatZonedDateDay(date: Date, timezone: string): string {
