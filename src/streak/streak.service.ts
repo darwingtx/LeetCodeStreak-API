@@ -30,9 +30,7 @@ export class StreakService {
     private prisma: PrismaService,
     private submissionService: SubmissionService,
   ) {
-    this.configService = configService;
     this.apiUrl = this.configService.get<string>('API_URL');
-    this.prisma = prisma;
   }
 
   async getStreakByUserId(id: string) {
