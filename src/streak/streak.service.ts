@@ -19,19 +19,16 @@ import {
   timestampToDate,
 } from 'src/Utils/Time';
 import { Cron } from '@nestjs/schedule';
+import { LeetcodeService } from 'src/leetcode/leetcode.service';
 
 @Injectable()
 export class StreakService {
   private readonly logger = new Logger(StreakService.name);
-  apiUrl: string | undefined;
-
   constructor(
-    private configService: ConfigService,
     private prisma: PrismaService,
     private submissionService: SubmissionService,
-  ) {
-    this.apiUrl = this.configService.get<string>('API_URL');
-  }
+    private leetcodeService: LeetcodeService,
+  ) {}
 
   async getStreakByUserId(id: string) {
     const streak = await this.prisma.user.findUnique({
@@ -85,9 +82,9 @@ export class StreakService {
     let streak = user.currentStreak;
 
     // Choose last 5 submissions leetcode exercises
-    const data = await this.queryACSubmissions(user.username, 5);
+    const submissions = await this.leetcodeService.getRecentAcSubmissions(user.username, 5);
 
-    const submissions: Submission[] = data.data.recentAcSubmissionList;
+    // submissions is already an array of Submission
     let firstProblemAtTs: number = 0;
     if (submissions.length === 0) {
       return user; // No new submissions
@@ -183,8 +180,7 @@ export class StreakService {
       throw new NotFoundException(`User with id ${id} not found`);
     }
 
-    const data = await this.queryACSubmissions(user.username, 30);
-    const submissions: Submission[] = data.data.recentAcSubmissionList;
+    const submissions = await this.leetcodeService.getRecentAcSubmissions(user.username, 30);
 
     if (submissions.length === 0) {
       return user;
@@ -445,41 +441,7 @@ export class StreakService {
     return currentStreakCount;
   }
 
-  private async queryACSubmissions(username: string, limit: number) {
-    const query = `#graphql
-    query getACSubmissions ($username: String!, $limit: Int) {
-      recentAcSubmissionList(username: $username, limit: $limit) {
-        title
-        titleSlug
-        timestamp
-        statusDisplay
-        lang
-      }
-    }`;
 
-    const body = JSON.stringify({
-      query,
-      variables: { username: username, limit: limit },
-    });
-
-    if (!this.apiUrl) {
-      throw new InternalServerErrorException('API_URL is not defined');
-    }
-
-    const res = await fetch(this.apiUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body,
-    });
-
-    if (!res.ok) {
-      throw new InternalServerErrorException(
-        `Error in request: ${res.statusText}`,
-      );
-    }
-
-    return await res.json();
-  }
 
   private isNextDay(
     submissionTs: number,

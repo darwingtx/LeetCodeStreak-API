@@ -9,186 +9,22 @@ import { MatchedUser } from './userTypes';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { getUTCOffset } from '../Utils/Time';
+import { LeetcodeService } from '../leetcode/leetcode.service';
 
 @Injectable()
 export class UserService {
   private readonly logger = new Logger(UserService.name);
-  apiUrl: string | undefined;
-
   constructor(
-    private configService: ConfigService,
     private prisma: PrismaService,
-  ) {
-    this.configService = configService;
-    this.apiUrl = this.configService.get<string>('API_URL');
-    this.prisma = prisma;
-  }
-
-  getUserProfile(username: string) {
-    const urlUser = this.apiUrl + username;
-    return fetch(urlUser).then((res) => res.json());
-  }
+    private leetcodeService: LeetcodeService,
+  ) {}
 
   async getProfileByUsername(username: string): Promise<MatchedUser> {
-    if (!this.apiUrl) {
-      throw new InternalServerErrorException(
-        'API_URL environment variable is not defined',
-      );
-    }
-    const query = `#graphql
-    query getUserProfile($username: String!) {
-        matchedUser(username: $username) {
-            username
-            githubUrl
-            twitterUrl
-            linkedinUrl
-            contributions {
-                points
-                questionCount
-                testcaseCount
-            }
-            profile {
-                realName
-                userAvatar
-                birthday
-                ranking
-                reputation
-                websites
-                countryName
-                company
-                school
-                skillTags
-                aboutMe
-                starRating
-            }
-            badges {
-                id
-                displayName
-                icon
-                creationDate
-            }
-            upcomingBadges {
-                name
-                icon
-            }
-            activeBadge {
-                id
-                displayName
-                icon
-                creationDate
-            }
-            submitStats {
-                
-                acSubmissionNum {
-                    difficulty
-                    count
-                    submissions
-                }
-            }
-            
-        }
-    }`;
-
-    const body = JSON.stringify({
-      query,
-      variables: { username },
-    });
-
-    const res = await fetch(this.apiUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body,
-    });
-
-    if (!res.ok) {
-      throw new InternalServerErrorException(
-        `Error in request: ${res.statusText}`,
-      );
-    }
-
-    const data = await res.json();
-    const matchedUser = data?.data?.matchedUser;
-    if (!matchedUser) {
-      throw new NotFoundException(
-        `User ${username} not found in external API`,
-      );
-    }
-    return matchedUser;
+    return this.leetcodeService.getProfileByUsername(username);
   }
 
   async createUser(username: string) {
-    if (!this.apiUrl) {
-      throw new InternalServerErrorException(
-        'API_URL environment variable is not defined',
-      );
-    }
-
-    const query = `
-    query getUserProfile($username: String!) {
-      matchedUser(username: $username) {
-        username
-        githubUrl
-        twitterUrl
-        linkedinUrl
-        contributions {
-          points
-          questionCount
-          testcaseCount
-        }
-        profile {
-          realName
-          userAvatar
-          birthday
-          ranking
-          reputation
-          websites
-          countryName
-          company
-          school
-          skillTags
-          aboutMe
-          starRating
-        }
-        badges {
-          id
-          displayName
-          icon
-          creationDate
-        }
-        activeBadge {
-          id
-          displayName
-          icon
-          creationDate
-        }
-      }
-    }
-  `;
-
-    const body = JSON.stringify({
-      query,
-      variables: { username },
-    });
-
-    const res = await fetch(this.apiUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body,
-    });
-
-    if (!res.ok) {
-      throw new InternalServerErrorException(
-        `Error in request: ${res.statusText}`,
-      );
-    }
-
-    const { data } = await res.json();
-    const matchedUser = data?.matchedUser;
-    if (!matchedUser) {
-      throw new NotFoundException(
-        `User ${username} not found in external API`,
-      );
-    }
+    const matchedUser = await this.leetcodeService.getMinimalProfileByUsername(username);
 
     const profile = matchedUser.profile ?? {};
 
