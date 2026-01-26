@@ -8,6 +8,10 @@ import { StreakModule } from './streak/streak.module';
 import { SubmissionModule } from './submission/submission.module';
 import { ScheduleModule } from '@nestjs/schedule';
 
+/**
+ * The root module of the application.
+ * Aggregates all feature modules and global providers.
+ */
 @Module({
   imports: [
     GroupModule,

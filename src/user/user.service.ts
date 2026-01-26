@@ -2,27 +2,60 @@ import {
   Injectable,
   Logger,
   NotFoundException,
-  InternalServerErrorException,
-  BadRequestException,
 } from '@nestjs/common';
 import { MatchedUser } from './userTypes';
-import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { getUTCOffset } from '../Utils/Time';
 import { LeetcodeService } from '../leetcode/leetcode.service';
 
+/**
+ * Service handling user data management and synchronization with LeetCode.
+ */
 @Injectable()
 export class UserService {
   private readonly logger = new Logger(UserService.name);
+
   constructor(
     private prisma: PrismaService,
     private leetcodeService: LeetcodeService,
   ) {}
 
+  /**
+   * Fetches the full LeetCode profile for a given username.
+   * @param username - LeetCode username.
+   * @returns Detailed profile data.
+   */
   async getProfileByUsername(username: string): Promise<MatchedUser> {
     return this.leetcodeService.getProfileByUsername(username);
   }
 
+  /**
+   * Retrieves a user from the local database by their ID, including recent streak history.
+   * @param id - Internal user ID.
+   * @throws NotFoundException if the user does not exist.
+   */
+  async getUserById(id: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id },
+      include: {
+        streakHistory: {
+          take: 10,
+          orderBy: { date: 'desc' },
+        },
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException(`User with ID ${id} not found in database`);
+    }
+
+    return user;
+  }
+
+  /**
+   * Creates a new user in the database by fetching minimal profile data from LeetCode.
+   * @param username - LeetCode username.
+   */
   async createUser(username: string) {
     const matchedUser = await this.leetcodeService.getMinimalProfileByUsername(username);
 
@@ -53,6 +86,12 @@ export class UserService {
     return user;
   }
 
+  /**
+   * Updates or creates a user profile in the database, syncing with LeetCode data.
+   * Also sets the user's timezone offset.
+   * @param username - LeetCode username.
+   * @param timeZone - IANA timezone string.
+   */
   async updateUserProfile(username: string, timeZone: string) {
     this.logger.log(`Updating user profile for: ${username}`);
     const profile = await this.getProfileByUsername(username);
@@ -84,7 +123,7 @@ export class UserService {
 
     try {
       const upserted = await this.prisma.user.upsert({
-        where: { username: profile.username }, // ← cambiar aquí
+        where: { username: profile.username },
         update: data,
         create: data as any,
       });
@@ -99,5 +138,4 @@ export class UserService {
       throw err;
     }
   }
-
 }

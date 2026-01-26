@@ -1,0 +1,44 @@
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: leetcode-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: leetcode_user
+      POSTGRES_PASSWORD: leetcode_password
+      POSTGRES_DB: leetcode_streak
+    ports:
+      - "5433:5432" # Mapped to 5433 to avoid conflict with local PostgreSQL
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U leetcode_user -d leetcode_streak" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # NestJS Application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: leetcode-streak-api
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://leetcode_user:leetcode_password@postgres:5432/leetcode_streak?schema=public
+      NODE_ENV: production
+      PORT: 3000
+      JWT_SECRET: ${JWT_SECRET:-change-this-secret-in-production}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
+      TIMEZONE: ${TIMEZONE:-UTC}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: sh -c "npx prisma migrate deploy && node dist/main"
+
+volumes:
+  postgres_data:
+    driver: local

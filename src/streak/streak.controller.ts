@@ -37,4 +37,9 @@ export class StreakController {
   updateStreakAllUsers() {
     return this.streakService.updateStreaksForAllUsers();
   }
+
+  @Post('fix-problems-count')
+  fixProblemsCount() {
+    return this.streakService.fixStreakHistoryProblemsCount();
+  }
 }
