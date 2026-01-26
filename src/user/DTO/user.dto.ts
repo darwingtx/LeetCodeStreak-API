@@ -1,6 +1,6 @@
 import { IsUUID } from 'class-validator';
 
 export class UserIdDto {
-  @IsUUID('4', { message: 'El ID proporcionado no es un UUID válido' })
+  @IsUUID('4', { message: 'The provided ID is not a valid UUID' })
   id: string;
 }
