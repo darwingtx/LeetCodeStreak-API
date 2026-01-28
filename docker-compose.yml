@@ -2,33 +2,33 @@ services:
   # PostgreSQL Database
   postgres:
     image: postgres:16-alpine
-    container_name: leetcode-postgres
+    container_name: leetcodestreak-db
     restart: unless-stopped
     environment:
-      POSTGRES_USER: leetcode_user
-      POSTGRES_PASSWORD: leetcode_password
-      POSTGRES_DB: leetcode_streak
+      POSTGRES_USER: ${POSTGRES_USER:-leetcode_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-leetcode_password}
+      POSTGRES_DB: ${POSTGRES_DB:-leetcode_streak}
     ports:
-      - "5433:5432" # Mapped to 5433 to avoid conflict with local PostgreSQL
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - "${POSTGRES_PORT_EXTERNAL:-5433}:5432" # Mapped to 5433 for external access
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U leetcode_user -d leetcode_streak" ]
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-leetcode_user} -d ${POSTGRES_DB:-leetcode_streak}" ]
       interval: 10s
       timeout: 5s
       retries: 5
 
   # NestJS Application
   app:
+    image: chewidev/leetcodestreak-api:latest
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: leetcode-streak-api
+    container_name: leetcodestreak-api
     restart: unless-stopped
     ports:
       - "3000:3000"
     environment:
-      DATABASE_URL: postgresql://leetcode_user:leetcode_password@postgres:5432/leetcode_streak?schema=public
+      DATABASE_URL: postgresql://${POSTGRES_USER:-leetcode_user}:${POSTGRES_PASSWORD:-leetcode_password}@postgres:5432/${POSTGRES_DB:-leetcode_streak}?schema=public
+      API_URL: ${API_URL}
       NODE_ENV: production
       PORT: 3000
       JWT_SECRET: ${JWT_SECRET:-change-this-secret-in-production}
