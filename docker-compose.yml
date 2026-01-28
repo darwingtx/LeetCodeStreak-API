@@ -1,0 +1,44 @@
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: leetcodestreak-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-leetcode_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-leetcode_password}
+      POSTGRES_DB: ${POSTGRES_DB:-leetcode_streak}
+    ports:
+      - "${POSTGRES_PORT_EXTERNAL:-5433}:5432" # Mapped to 5433 for external access
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-leetcode_user} -d ${POSTGRES_DB:-leetcode_streak}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # NestJS Application
+  app:
+    image: chewidev/leetcodestreak-api:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: leetcodestreak-api
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-leetcode_user}:${POSTGRES_PASSWORD:-leetcode_password}@postgres:5432/${POSTGRES_DB:-leetcode_streak}?schema=public
+      API_URL: ${API_URL}
+      NODE_ENV: production
+      PORT: 3000
+      JWT_SECRET: ${JWT_SECRET:-change-this-secret-in-production}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
+      TIMEZONE: ${TIMEZONE:-UTC}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: sh -c "npx prisma migrate deploy && node dist/main"
+
+volumes:
+  postgres_data:
+    driver: local

@@ -2,193 +2,62 @@ import {
   Injectable,
   Logger,
   NotFoundException,
-  InternalServerErrorException,
-  BadRequestException,
 } from '@nestjs/common';
 import { MatchedUser } from './userTypes';
-import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { getUTCOffset } from '../Utils/Time';
+import { LeetcodeService } from '../leetcode/leetcode.service';
 
+/**
+ * Service handling user data management and synchronization with LeetCode.
+ */
 @Injectable()
 export class UserService {
   private readonly logger = new Logger(UserService.name);
-  apiUrl: string | undefined;
 
   constructor(
-    private configService: ConfigService,
     private prisma: PrismaService,
-  ) {
-    this.configService = configService;
-    this.apiUrl = this.configService.get<string>('API_URL');
-    this.prisma = prisma;
-  }
+    private leetcodeService: LeetcodeService,
+  ) {}
 
-  getUserProfile(username: string) {
-    const urlUser = this.apiUrl + username;
-    return fetch(urlUser).then((res) => res.json());
-  }
-
+  /**
+   * Fetches the full LeetCode profile for a given username.
+   * @param username - LeetCode username.
+   * @returns Detailed profile data.
+   */
   async getProfileByUsername(username: string): Promise<MatchedUser> {
-    if (!this.apiUrl) {
-      throw new InternalServerErrorException(
-        'API_URL environment variable is not defined',
-      );
-    }
-    const query = `#graphql
-    query getUserProfile($username: String!) {
-        matchedUser(username: $username) {
-            username
-            githubUrl
-            twitterUrl
-            linkedinUrl
-            contributions {
-                points
-                questionCount
-                testcaseCount
-            }
-            profile {
-                realName
-                userAvatar
-                birthday
-                ranking
-                reputation
-                websites
-                countryName
-                company
-                school
-                skillTags
-                aboutMe
-                starRating
-            }
-            badges {
-                id
-                displayName
-                icon
-                creationDate
-            }
-            upcomingBadges {
-                name
-                icon
-            }
-            activeBadge {
-                id
-                displayName
-                icon
-                creationDate
-            }
-            submitStats {
-                
-                acSubmissionNum {
-                    difficulty
-                    count
-                    submissions
-                }
-            }
-            
-        }
-    }`;
-
-    const body = JSON.stringify({
-      query,
-      variables: { username },
-    });
-
-    const res = await fetch(this.apiUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body,
-    });
-
-    if (!res.ok) {
-      throw new InternalServerErrorException(
-        `Error in request: ${res.statusText}`,
-      );
-    }
-
-    const data = await res.json();
-    const matchedUser = data?.data?.matchedUser;
-    if (!matchedUser) {
-      throw new NotFoundException(
-        `User ${username} not found in external API`,
-      );
-    }
-    return matchedUser;
+    return this.leetcodeService.getProfileByUsername(username);
   }
 
+  /**
+   * Retrieves a user from the local database by their ID, including recent streak history.
+   * @param id - Internal user ID.
+   * @throws NotFoundException if the user does not exist.
+   */
+  async getUserById(id: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id },
+      include: {
+        streakHistory: {
+          take: 10,
+          orderBy: { date: 'desc' },
+        },
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException(`User with ID ${id} not found in database`);
+    }
+
+    return user;
+  }
+
+  /**
+   * Creates a new user in the database by fetching minimal profile data from LeetCode.
+   * @param username - LeetCode username.
+   */
   async createUser(username: string) {
-    if (!this.apiUrl) {
-      throw new InternalServerErrorException(
-        'API_URL environment variable is not defined',
-      );
-    }
-
-    const query = `
-    query getUserProfile($username: String!) {
-      matchedUser(username: $username) {
-        username
-        githubUrl
-        twitterUrl
-        linkedinUrl
-        contributions {
-          points
-          questionCount
-          testcaseCount
-        }
-        profile {
-          realName
-          userAvatar
-          birthday
-          ranking
-          reputation
-          websites
-          countryName
-          company
-          school
-          skillTags
-          aboutMe
-          starRating
-        }
-        badges {
-          id
-          displayName
-          icon
-          creationDate
-        }
-        activeBadge {
-          id
-          displayName
-          icon
-          creationDate
-        }
-      }
-    }
-  `;
-
-    const body = JSON.stringify({
-      query,
-      variables: { username },
-    });
-
-    const res = await fetch(this.apiUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body,
-    });
-
-    if (!res.ok) {
-      throw new InternalServerErrorException(
-        `Error in request: ${res.statusText}`,
-      );
-    }
-
-    const { data } = await res.json();
-    const matchedUser = data?.matchedUser;
-    if (!matchedUser) {
-      throw new NotFoundException(
-        `User ${username} not found in external API`,
-      );
-    }
+    const matchedUser = await this.leetcodeService.getMinimalProfileByUsername(username);
 
     const profile = matchedUser.profile ?? {};
 
@@ -217,6 +86,12 @@ export class UserService {
     return user;
   }
 
+  /**
+   * Updates or creates a user profile in the database, syncing with LeetCode data.
+   * Also sets the user's timezone offset.
+   * @param username - LeetCode username.
+   * @param timeZone - IANA timezone string.
+   */
   async updateUserProfile(username: string, timeZone: string) {
     this.logger.log(`Updating user profile for: ${username}`);
     const profile = await this.getProfileByUsername(username);
@@ -248,7 +123,7 @@ export class UserService {
 
     try {
       const upserted = await this.prisma.user.upsert({
-        where: { username: profile.username }, // ← cambiar aquí
+        where: { username: profile.username },
         update: data,
         create: data as any,
       });
@@ -263,5 +138,4 @@ export class UserService {
       throw err;
     }
   }
-
 }
