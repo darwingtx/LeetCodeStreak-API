@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { GET_USER_PROFILE, GET_USER_PROFILE_MINIMAL, GET_RECENT_AC_SUBMISSIONS } from './leetcode.queries';
+import { GET_USER_PROFILE, GET_USER_PROFILE_MINIMAL, GET_RECENT_AC_SUBMISSIONS, GET_USER_VERIFICATION_CODE } from './leetcode.queries';
 import { MatchedUser, Submission } from '../user/userTypes';
 
 /**
@@ -73,7 +73,7 @@ export class LeetcodeService {
 
     if (!res.ok) {
       throw new InternalServerErrorException(
-          `Error in LeetCode API request: ${res.statusText}`,
+        `Error in LeetCode API request: ${res.statusText}`,
       );
     }
 
@@ -87,5 +87,14 @@ export class LeetcodeService {
     }
 
     return result;
+  }
+
+  async getUserVerificationCode(username: string): Promise<string> {
+    const result = await this.executeQuery<{ profile: { aboutMe: string } }>(
+      GET_USER_VERIFICATION_CODE,
+      { username },
+      'matchedUser',
+    );
+    return result?.profile?.aboutMe || '';
   }
 }

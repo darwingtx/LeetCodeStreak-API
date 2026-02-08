@@ -19,9 +19,6 @@ services:
   # NestJS Application
   app:
     image: chewidev/leetcodestreak-api:latest
-    build:
-      context: .
-      dockerfile: Dockerfile
     container_name: leetcodestreak-api
     restart: unless-stopped
     ports:

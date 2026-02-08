@@ -100,6 +100,16 @@ export const GET_USER_PROFILE_MINIMAL = `#graphql
   }
 `;
 
+export const GET_USER_VERIFICATION_CODE = `#graphql
+  query getUserProfile($username: String!) {
+    matchedUser(username: $username) {
+      profile {
+        aboutMe
+      }
+    }
+  }
+`;
+
 /**
  * GraphQL query to fetch the most recent accepted (AC) submissions for a user.
  */
