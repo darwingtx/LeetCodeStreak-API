@@ -11,6 +11,7 @@ interface JwtPayload {
   sub: string; // user id
   username: string;
   isVerified: boolean;
+  role: string;
 }
 
 /**
@@ -23,6 +24,7 @@ export interface AuthResponse {
     id: string;
     username: string;
     isVerified: boolean;
+    role: string;
   };
 }
 
@@ -39,7 +41,7 @@ export class AuthService {
     private userService: UserService,
     private prisma: PrismaService,
     private jwtService: JwtService,
-  ) {}
+  ) { }
 
   /**
    * Handles user login. Creates user if not exists, then issues tokens.
@@ -57,7 +59,7 @@ export class AuthService {
     }
 
     // Generate tokens
-    const tokens = await this.generateTokens(user.id, user.username, user.isVerified);
+    const tokens = await this.generateTokens(user.id, user.username, user.isVerified, user.role);
 
     return {
       ...tokens,
@@ -65,6 +67,7 @@ export class AuthService {
         id: user.id,
         username: user.username,
         isVerified: user.isVerified,
+        role: user.role,
       },
     };
   }
@@ -98,6 +101,7 @@ export class AuthService {
       storedToken.user.id,
       storedToken.user.username,
       storedToken.user.isVerified,
+      storedToken.user.role,
     );
 
     return {
@@ -106,6 +110,7 @@ export class AuthService {
         id: storedToken.user.id,
         username: storedToken.user.username,
         isVerified: storedToken.user.isVerified,
+        role: storedToken.user.role,
       },
     };
   }
@@ -127,11 +132,13 @@ export class AuthService {
     userId: string,
     username: string,
     isVerified: boolean,
+    role: string,
   ): Promise<{ accessToken: string; refreshToken: string }> {
     const payload: JwtPayload = {
       sub: userId,
       username,
       isVerified,
+      role,
     };
 
     const accessToken = this.jwtService.sign(payload, {

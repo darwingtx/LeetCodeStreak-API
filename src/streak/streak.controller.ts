@@ -1,6 +1,9 @@
 import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { StreakService } from './streak.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { Role } from '@prisma/client';
 
 @Controller('streak')
 export class StreakController {
@@ -39,11 +42,15 @@ export class StreakController {
   }
 
   // Endpoints públicos (sin autenticación)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN)
   @Patch('updateallusers')
   updateStreakAllUsers() {
     return this.streakService.updateStreaksForAllUsers();
   }
 
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN)
   @Post('fix-problems-count')
   fixProblemsCount() {
     return this.streakService.fixStreakHistoryProblemsCount();

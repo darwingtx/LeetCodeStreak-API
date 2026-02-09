@@ -1,13 +1,16 @@
 import { Body, Controller, Get, Param, Patch } from '@nestjs/common';
 import { UserService } from './user.service';
 import { UserIdDto } from './DTO/user.dto';
+import { UseGuards } from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
 
 /**
  * Controller handling user-related operations such as profile retrieval and updates.
  */
+@UseGuards(AuthGuard('jwt'))
 @Controller('user')
 export class UserController {
-  constructor(private userService: UserService) {}
+  constructor(private userService: UserService) { }
 
   /**
    * Retrieves the profile information for a user by their ID.

@@ -18,17 +18,18 @@ services:
 
   # NestJS Application
   app:
+    build: .
     image: chewidev/leetcodestreak-api:latest
     container_name: leetcodestreak-api
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "${PORT:-3000}:${PORT:-3000}"
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-leetcode_user}:${POSTGRES_PASSWORD:-leetcode_password}@postgres:5432/${POSTGRES_DB:-leetcode_streak}?schema=public
       API_URL: ${API_URL}
       NODE_ENV: production
-      PORT: 3000
-      JWT_SECRET: ${JWT_SECRET:-change-this-secret-in-production}
+      PORT: ${PORT:-3000}
+      JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
       TIMEZONE: ${TIMEZONE:-UTC}
     depends_on:

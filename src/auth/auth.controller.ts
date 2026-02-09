@@ -6,10 +6,12 @@ import {
   Body,
   HttpCode,
   HttpStatus,
+  UseGuards,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { VerificationService } from '../verification/verification.service';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
+import { AuthGuard } from '@nestjs/passport';
 
 /**
  * Controller handling authentication-related requests.
@@ -19,7 +21,7 @@ export class AuthController {
   constructor(
     private authService: AuthService,
     private verificationService: VerificationService,
-  ) {}
+  ) { }
 
   /**
    * Performs a login operation for the specified LeetCode username.
@@ -46,6 +48,7 @@ export class AuthController {
    * Revokes a refresh token (logout).
    * @param dto - Contains the refresh token to revoke.
    */
+  @UseGuards(AuthGuard('jwt'))
   @Post('logout')
   @HttpCode(HttpStatus.OK)
   async logout(@Body() dto: RefreshTokenDto) {

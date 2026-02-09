@@ -11,6 +11,7 @@ interface JwtPayload {
   sub: string;
   username: string;
   isVerified: boolean;
+  role: string;
 }
 
 /**
