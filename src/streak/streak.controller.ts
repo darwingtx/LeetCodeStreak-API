@@ -42,8 +42,7 @@ export class StreakController {
   }
 
   // Endpoints públicos (sin autenticación)
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.ADMIN)
+
   @Patch('updateallusers')
   updateStreakAllUsers() {
     return this.streakService.updateStreaksForAllUsers();
