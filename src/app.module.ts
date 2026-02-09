@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { GroupModule } from './group/group.module';
 import { AuthModule } from './auth/auth.module';
 import { UserModule } from './user/user.module';
+import { AppController } from './app.controller';
 import { PrismaService } from './prisma/prisma.service';
 import { ConfigModule } from '@nestjs/config';
 import { StreakModule } from './streak/streak.module';
@@ -24,6 +25,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     }),
     SubmissionModule,
   ],
+  controllers: [AppController],
   providers: [PrismaService],
 })
-export class AppModule {}
+export class AppModule { }
