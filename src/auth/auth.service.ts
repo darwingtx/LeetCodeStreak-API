@@ -41,7 +41,7 @@ export class AuthService {
     private userService: UserService,
     private prisma: PrismaService,
     private jwtService: JwtService,
-  ) { }
+  ) {}
 
   /**
    * Handles user login. Creates user if not exists, then issues tokens.
@@ -59,7 +59,12 @@ export class AuthService {
     }
 
     // Generate tokens
-    const tokens = await this.generateTokens(user.id, user.username, user.isVerified, user.role);
+    const tokens = await this.generateTokens(
+      user.id,
+      user.username,
+      user.isVerified,
+      user.role,
+    );
 
     return {
       ...tokens,
@@ -178,5 +183,8 @@ export class AuthService {
     }
 
     return user;
+  }
+  async register(username: string) {
+    await this.userService.createUser(username);
   }
 }

@@ -80,4 +80,16 @@ export class AuthController {
     const verified = await this.verificationService.verifyProfile(username);
     return { verified };
   }
+
+  @Get('verifyExistence/:username')
+  async verifyExistence(@Param('username') username: string) {
+    const exists = await this.verificationService.verifyExistence(username);
+    return { exists };
+  }
+
+  @Post('register/:username')
+  async register(@Param('username') username: string) {
+    return this.authService.register(username);
+  }
+  
 }

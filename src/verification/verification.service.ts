@@ -11,7 +11,7 @@ export class VerificationService {
   constructor(
     private prisma: PrismaService,
     private leetcodeService: LeetcodeService,
-  ) { }
+  ) {}
 
   /**
    * Generates a unique verification code for a user and stores it in the database.
@@ -84,5 +84,22 @@ export class VerificationService {
       result += chars.charAt(Math.floor(Math.random() * chars.length));
     }
     return result;
+  }
+
+  async verifyExistence(username: string): Promise<boolean> {
+    try {
+      const user = await this.prisma.user.findUnique({
+        where: { username },
+      });
+      if (!user) {
+        throw new NotFoundException(`User with username "${username}" not found`);
+      }
+      return true;
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        return false;
+      }
+      throw error; // Re-throw other unexpected errors
+    }
   }
 }

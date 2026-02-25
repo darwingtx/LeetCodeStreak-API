@@ -8,6 +8,9 @@ import { ConfigModule } from '@nestjs/config';
 import { StreakModule } from './streak/streak.module';
 import { SubmissionModule } from './submission/submission.module';
 import { ScheduleModule } from '@nestjs/schedule';
+import { ProblemController } from './problem/problem.controller';
+import { ProblemService } from './problem/problem.service';
+import { ProblemModule } from './problem/problem.module';
 
 /**
  * The root module of the application.
@@ -24,8 +27,9 @@ import { ScheduleModule } from '@nestjs/schedule';
       isGlobal: true,
     }),
     SubmissionModule,
+    ProblemModule,
   ],
-  controllers: [AppController],
-  providers: [PrismaService],
+  controllers: [AppController, ProblemController],
+  providers: [PrismaService, ProblemService],
 })
 export class AppModule { }

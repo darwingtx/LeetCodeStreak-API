@@ -19,6 +19,9 @@ async function bootstrap() {
 
   // Apply custom exception filter for unified error handling
   app.useGlobalFilters(new AllExceptionsFilter());
+
+  // Enable CORS for cross-origin requests
+  app.enableCors();
   
   const port = process.env.PORT ?? 3000;
   await app.listen(port);
